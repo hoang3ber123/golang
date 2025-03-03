@@ -35,10 +35,11 @@ func main() {
 
 	// Middleware CORS
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3000, http://127.0.0.1:3000", // Chỉ định các domain được phép
+		AllowOrigins:     "http://127.0.0.1:3000", // Chỉ định các domain được phép
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
-		AllowHeaders:     "Content-Type, Authorization",
-		AllowCredentials: true, // Cho phép gửi cookie
+		AllowHeaders:     "Content-Type, Authorization, api-key",
+		AllowCredentials: true,         // Cho phép gửi cookie
+		ExposeHeaders:    "Set-Cookie", // Để client đọc được cookie từ response
 	}))
 
 	// Middleware Encrypt Cookie

@@ -107,7 +107,7 @@ func ConnectToApiGateway() {
 		fmt.Println("Route created successfully")
 	}
 
-	// 3. Thêm plugin CORS (Allow any host)
+	// 3. Thêm plugin CORS (Allow any host) Setting cors cho Kong API gateway
 	corsPlugin := PluginConfig{
 		Name: "cors",
 		Config: map[string]interface{}{
@@ -115,9 +115,9 @@ func ConnectToApiGateway() {
 			"methods":            []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},                                                // Các method được phép
 			"headers":            []string{"Accept", "Accept-Version", "Content-Length", "Content-Type", "Authorization", "api-key"}, // Headers được phép
 			"exposed_headers":    []string{"X-Auth-token", "Set-Cookie"},
-			"credentials":        true,      // Không cho phép gửi credentials
-			"max_age":            3600 * 10, // Thời gian cache CORS (giây)
-			"preflight_continue": false,     // Không tiếp tục xử lý preflight
+			"credentials":        true,  // Cho phép gửi credentials
+			"max_age":            36000, // Thời gian cache CORS (giây)
+			"preflight_continue": false, // Không tiếp tục xử lý preflight
 		},
 	}
 	fmt.Println("Enabling CORS plugin...")
