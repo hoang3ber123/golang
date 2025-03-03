@@ -8,6 +8,11 @@ import (
 )
 
 var Config struct {
+	DatabaseName     string
+	DatabaseUsername string
+	DatabaseHost     string
+	DatabasePort     string
+	DatabasePassword string
 	DatabaseURL      string
 	EncryptCookieKey string
 	SMTPUsername     string
@@ -32,6 +37,11 @@ func init() {
 
 	// Database setting
 	Config.DatabaseURL = os.Getenv("DATABASE_URL")
+	Config.DatabaseName = os.Getenv("DATABASE_NAME")
+	Config.DatabaseUsername = os.Getenv("DATABASE_USERNAME")
+	Config.DatabaseHost = os.Getenv("DATABASE_HOST")
+	Config.DatabasePort = os.Getenv("DATABASE_PORT")
+	Config.DatabasePassword = os.Getenv("DATABASE_PASSWORD")
 	// JWT setting
 	Config.EncryptCookieKey = os.Getenv("ENCRYPT_COOKIE_KEY")
 	// API gateway setting
