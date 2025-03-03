@@ -1,0 +1,40 @@
+services:
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auth_service
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASSWORD=Admin@123
+      - DB_NAME=authservice
+      - DB_PORT=3306
+    networks:
+      - kong-network
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    image: mariadb:latest
+    container_name: mariadb
+    environment:
+      - MYSQL_ROOT_PASSWORD=Admin@123
+      - MYSQL_DATABASE=authservice
+    ports:
+      - "3306:3306"
+    networks:
+      - kong-network
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    restart: unless-stopped
+
+volumes:
+  mariadb_data:
+
+networks:
+  kong-network:
+    external: true

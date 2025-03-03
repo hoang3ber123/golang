@@ -1,0 +1,5 @@
+# Stage 1: Copy script vào Alpine (image nhỏ nhất)
+FROM alpine:latest AS builder
+
+# Stage 2: Chạy Kong từ Alpine
+FROM kong:alpine
