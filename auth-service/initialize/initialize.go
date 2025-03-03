@@ -21,8 +21,9 @@ type KongService struct {
 }
 
 type KongRoute struct {
-	Paths []string `json:"paths"`
-	Name  string   `json:"name"`
+	Paths     []string `json:"paths"`
+	Name      string   `json:"name"`
+	StripPath bool     `json:"strip_path,omitempty"`
 }
 
 type PluginConfig struct {
@@ -95,8 +96,9 @@ func ConnectToApiGateway() {
 
 	// 2. Tạo Route cho Service
 	route := KongRoute{
-		Paths: []string{config.Config.ServicePath},
-		Name:  config.Config.ServiceRoute,
+		Paths:     []string{config.Config.ServicePath},
+		Name:      config.Config.ServiceRoute,
+		StripPath: true,
 	}
 	fmt.Printf("Creating route: %s with path: %s\n", route.Name, route.Paths)
 	if err := postJSON(client, fmt.Sprintf("%s/services/auth-services/routes", kongAdminURL), route); err != nil {
