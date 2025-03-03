@@ -111,13 +111,13 @@ func ConnectToApiGateway() {
 	corsPlugin := PluginConfig{
 		Name: "cors",
 		Config: map[string]interface{}{
-			"origins":            []string{"http://localhost:3000"},                                                                  // Cho phép bất kỳ host nào
+			"origins":            []string{"http://localhost:3000", "http://127.0.0.1:3000"},                                         // Thêm cả 127.0.0.1
 			"methods":            []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},                                                // Các method được phép
 			"headers":            []string{"Accept", "Accept-Version", "Content-Length", "Content-Type", "Authorization", "api-key"}, // Headers được phép
-			"exposed_headers":    []string{""},                                                                                       // Headers trả về client có thể thấy
-			"credentials":        true,                                                                                               // Không cho phép gửi credentials
-			"max_age":            3600,                                                                                               // Thời gian cache CORS (giây)
-			"preflight_continue": false,                                                                                              // Không tiếp tục xử lý preflight
+			"exposed_headers":    []string{"X-Auth-token"},
+			"credentials":        true,  // Không cho phép gửi credentials
+			"max_age":            3600,  // Thời gian cache CORS (giây)
+			"preflight_continue": false, // Không tiếp tục xử lý preflight
 		},
 	}
 	fmt.Println("Enabling CORS plugin...")
