@@ -109,13 +109,13 @@ func ConnectToApiGateway() {
 	corsPlugin := PluginConfig{
 		Name: "cors",
 		Config: map[string]interface{}{
-			"origins":            []string{"*"},                                                                           // Cho phép bất kỳ host nào
-			"methods":            []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},                                     // Các method được phép
-			"headers":            []string{"Accept", "Accept-Version", "Content-Length", "Content-Type", "Authorization"}, // Headers được phép
-			"exposed_headers":    []string{"X-Auth-Token"},                                                                // Headers trả về client có thể thấy
-			"credentials":        false,                                                                                   // Không cho phép gửi credentials
-			"max_age":            3600,                                                                                    // Thời gian cache CORS (giây)
-			"preflight_continue": false,                                                                                   // Không tiếp tục xử lý preflight
+			"origins":            []string{"http://localhost:3000"},                                                                  // Cho phép bất kỳ host nào
+			"methods":            []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},                                                // Các method được phép
+			"headers":            []string{"Accept", "Accept-Version", "Content-Length", "Content-Type", "Authorization", "api-key"}, // Headers được phép
+			"exposed_headers":    []string{""},                                                                                       // Headers trả về client có thể thấy
+			"credentials":        true,                                                                                               // Không cho phép gửi credentials
+			"max_age":            3600,                                                                                               // Thời gian cache CORS (giây)
+			"preflight_continue": false,                                                                                              // Không tiếp tục xử lý preflight
 		},
 	}
 	fmt.Println("Enabling CORS plugin...")
