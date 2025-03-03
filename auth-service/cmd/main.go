@@ -14,6 +14,7 @@ import (
 
 	"github.com/goccy/go-json"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/encryptcookie"
 )
 
@@ -27,12 +28,20 @@ func main() {
 	app := fiber.New(fiber.Config{
 		JSONEncoder:  json.Marshal,
 		JSONDecoder:  json.Unmarshal,
-		IdleTimeout:  5 * time.Second, // Max time to wait for in-flight requests
+		IdleTimeout:  5 * time.Second,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 5 * time.Second,
 	})
 
-	// Provide a minimal configuration
+	// Middleware CORS
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:     "http://localhost:3000, http://127.0.0.1:3000", // Chỉ định các domain được phép
+		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
+		AllowHeaders:     "Content-Type, Authorization",
+		AllowCredentials: true, // Cho phép gửi cookie
+	}))
+
+	// Middleware Encrypt Cookie
 	app.Use(encryptcookie.New(encryptcookie.Config{
 		Key: config.Config.EncryptCookieKey,
 	}))
