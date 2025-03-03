@@ -105,7 +105,27 @@ func ConnectToApiGateway() {
 		fmt.Println("Route created successfully")
 	}
 
-	// 3. Bật rate-limiting cho toàn bộ Service
+	// 3. Thêm plugin CORS (Allow any host)
+	corsPlugin := PluginConfig{
+		Name: "cors",
+		Config: map[string]interface{}{
+			"origins":            []string{"*"},                                                                           // Cho phép bất kỳ host nào
+			"methods":            []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},                                     // Các method được phép
+			"headers":            []string{"Accept", "Accept-Version", "Content-Length", "Content-Type", "Authorization"}, // Headers được phép
+			"exposed_headers":    []string{"X-Auth-Token"},                                                                // Headers trả về client có thể thấy
+			"credentials":        false,                                                                                   // Không cho phép gửi credentials
+			"max_age":            3600,                                                                                    // Thời gian cache CORS (giây)
+			"preflight_continue": false,                                                                                   // Không tiếp tục xử lý preflight
+		},
+	}
+	fmt.Println("Enabling CORS plugin...")
+	if err := postJSON(client, fmt.Sprintf("%s/plugins", kongAdminURL), corsPlugin); err != nil {
+		fmt.Printf("Error enabling CORS plugin: %v\n", err)
+	} else {
+		fmt.Println("CORS plugin enabled successfully")
+	}
+
+	// 4. Bật rate-limiting cho toàn bộ Service
 	rateLimit := PluginConfig{
 		Name: "rate-limiting",
 		Config: map[string]interface{}{
@@ -120,7 +140,7 @@ func ConnectToApiGateway() {
 		fmt.Println("Rate-limiting enabled successfully")
 	}
 
-	// 4. Tạo Consumer admin
+	// 5. Tạo Consumer admin
 	consumer := Consumer{
 		Username: "admin",
 	}
@@ -131,7 +151,7 @@ func ConnectToApiGateway() {
 		fmt.Println("Consumer created successfully")
 	}
 
-	// 5. Gán API Key cho admin
+	// 6. Gán API Key cho admin
 	keyAuth := KeyAuth{
 		Key: config.Config.APIKey,
 	}
@@ -142,7 +162,7 @@ func ConnectToApiGateway() {
 		fmt.Println("API key assigned successfully")
 	}
 
-	// 6. Enable API Key authentication
+	// 7. Enable API Key authentication
 	keyAuthPlugin := PluginConfig{
 		Name: "key-auth",
 		Config: map[string]interface{}{
