@@ -91,6 +91,6 @@ func EmployeeList(c *fiber.Ctx) error {
 }
 
 func EmployeeDetail(c *fiber.Ctx) error {
-	employee := c.Locals("Employee").(*models.Employee)
+	employee := c.Locals("employee").(*models.Employee)
 	return responses.SendSuccessResponse(c, fiber.StatusOK, serializers.EmployeeDetailResponse(employee))
 }
