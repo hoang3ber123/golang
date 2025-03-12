@@ -112,7 +112,7 @@ func ConnectToApiGateway() {
 		Name: "cors",
 		Config: map[string]interface{}{
 			"origins":            []string{"http://localhost:3000", "http://127.0.0.1:3000"},                                         // Thêm cả 127.0.0.1
-			"methods":            []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},                                                // Các method được phép
+			"methods":            []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},                                       // Các method được phép
 			"headers":            []string{"Accept", "Accept-Version", "Content-Length", "Content-Type", "Authorization", "api-key"}, // Headers được phép
 			"exposed_headers":    []string{"X-Auth-token", "Set-Cookie"},
 			"credentials":        true,  // Cho phép gửi credentials

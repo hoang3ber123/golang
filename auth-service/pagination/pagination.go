@@ -1,7 +1,7 @@
 package pagination
 
 import (
-	"errors"
+	"auth-service/internal/responses"
 	"fmt"
 
 	"github.com/gofiber/fiber/v2"
@@ -22,11 +22,11 @@ type PaginatedResponse struct {
 }
 
 // PaginateWithGORM handles pagination with optional custom query scope
-func PaginateWithGORM[T any](c *fiber.Ctx, query *gorm.DB, modelDest *[]T) (*Pagination, error) {
+func PaginateWithGORM[T any](c *fiber.Ctx, query *gorm.DB, modelDest *[]T) (*Pagination, *responses.ErrorResponse) {
 	// Parse pagination params
 	p := &Pagination{}
 	if err := c.QueryParser(p); err != nil {
-		return nil, err
+		return nil, responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid pagination parameters: "+err.Error())
 	}
 
 	// Set bounds
@@ -43,25 +43,26 @@ func PaginateWithGORM[T any](c *fiber.Ctx, query *gorm.DB, modelDest *[]T) (*Pag
 	// Get total count
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		return nil, err
+		return nil, responses.NewErrorResponse(fiber.StatusInternalServerError, "Failed to count records: "+err.Error())
 	}
-	if int(total) == 0 {
-		return nil, errors.New("no object can be found")
+	if total == 0 {
+		return nil, responses.NewErrorResponse(fiber.StatusNotFound, "No objects found")
 	}
+
+	// Set pagination metadata
 	p.Total = int(total)
 	p.TotalPage = (p.Total + p.PageSize - 1) / p.PageSize
 
+	// Check if page exceeds total pages
 	if p.Page > p.TotalPage {
-		return nil, fmt.Errorf("page %d exceeds total pages %d", p.Page, p.TotalPage)
+		return nil, responses.NewErrorResponse(fiber.StatusBadRequest, fmt.Sprintf("Page %d exceeds total pages %d", p.Page, p.TotalPage))
 	}
 
-	// Fetch data only if there’s something to retrieve
-	if p.Total > 0 {
-		if err := query.Limit(p.PageSize).Offset(offset).Find(modelDest).Error; err != nil {
-			return nil, err
-		}
+	// Fetch data
+	if err := query.Limit(p.PageSize).Offset(offset).Find(modelDest).Error; err != nil {
+		return nil, responses.NewErrorResponse(fiber.StatusInternalServerError, "Failed to fetch data: "+err.Error())
 	}
 
-	// Return response
+	// Return pagination info
 	return p, nil
 }

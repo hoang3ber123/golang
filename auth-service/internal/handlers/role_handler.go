@@ -6,6 +6,7 @@ import (
 	"auth-service/internal/responses"
 	"auth-service/internal/serializers"
 	"auth-service/pagination"
+	"errors"
 
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
@@ -14,16 +15,17 @@ import (
 func RoleCreate(c *fiber.Ctx) error {
 	serializer := new(serializers.RoleCreateSerializer)
 	if err := serializer.IsValid(c); err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusBadRequest, err.Error())
+		return err.Send(c)
 	}
-	// Serializer to model
+
+	// Chuyển serializer thành model
 	role := serializer.ToModel()
 	if err := db.DB.Create(&role).Error; err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Failed to create role: "+err.Error()).Send(c)
 	}
 
 	// Response
-	return responses.SendSuccessResponse(c, fiber.StatusCreated, serializers.RoleDetailResponse(&role))
+	return responses.NewSuccessResponse(fiber.StatusCreated, serializers.RoleDetailResponse(&role)).Send(c)
 }
 
 func RoleUpdate(c *fiber.Ctx) error {
@@ -31,24 +33,27 @@ func RoleUpdate(c *fiber.Ctx) error {
 	var instance models.Role
 
 	// Kiểm tra xem role có tồn tại không
-	if err := db.DB.First(&instance, "id = ?", id).Error; err == gorm.ErrRecordNotFound {
-		return responses.SendErrorResponse(c, fiber.StatusNotFound, "Role not found")
+	if err := db.DB.First(&instance, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return responses.NewErrorResponse(fiber.StatusNotFound, "Role not found").Send(c)
+		}
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Database error: "+err.Error()).Send(c)
 	}
 
 	serializer := new(serializers.RoleUpdateSerializer)
 
 	// Nếu có lỗi validation, return ngay lập tức
 	if err := serializer.IsValid(c); err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusBadRequest, err.Error())
+		return err.Send(c)
 	}
 
 	// Nếu validation OK, thực hiện update
 	if err := serializer.Update(&instance); err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+		return err.Send(c)
 	}
 
 	// Trả về response thành công
-	return responses.SendSuccessResponse(c, fiber.StatusOK, serializers.RoleDetailResponse(&instance))
+	return responses.NewSuccessResponse(fiber.StatusOK, serializers.RoleDetailResponse(&instance)).Send(c)
 }
 
 func RoleList(c *fiber.Ctx) error {
@@ -63,22 +68,25 @@ func RoleList(c *fiber.Ctx) error {
 	var roles []models.Role
 	paginator, err := pagination.PaginateWithGORM(c, query, &roles)
 	if err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusInternalServerError, "Failed to fetch: "+err.Error())
+		return err.Send(c)
 	}
 
-	return responses.SendSuccessResponse(c, fiber.StatusOK, fiber.Map{
+	return responses.NewSuccessResponse(fiber.StatusOK, fiber.Map{
 		"pagination": paginator,
 		"result":     serializers.RoleListResponse(&roles),
-	})
+	}).Send(c)
 }
 
 func RoleDetail(c *fiber.Ctx) error {
 	slug := c.Params("slug")
 	var instance models.Role
-	if err := db.DB.First(&instance, "slug = ?", slug).Error; err == gorm.ErrRecordNotFound {
-		return responses.SendErrorResponse(c, fiber.StatusNotFound, "Role not found")
+	if err := db.DB.First(&instance, "slug = ?", slug).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return responses.NewErrorResponse(fiber.StatusNotFound, "Role not found").Send(c)
+		}
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Database error: "+err.Error()).Send(c)
 	}
-	return responses.SendSuccessResponse(c, fiber.StatusOK, serializers.RoleDetailResponse(&instance))
+	return responses.NewSuccessResponse(fiber.StatusOK, serializers.RoleDetailResponse(&instance)).Send(c)
 }
 
 func RoleDelete(c *fiber.Ctx) error {
@@ -87,14 +95,14 @@ func RoleDelete(c *fiber.Ctx) error {
 
 	//  Nếu có lỗi validation, return ngay lập tức
 	if err := serializer.IsValid(c); err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusBadRequest, err.Error())
+		return err.Send(c)
 	}
 
 	//  Nếu validation OK, thực hiện delete
 	if err := serializer.Delete(); err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+		return err.Send(c)
 	}
 
 	//  Trả về response thành công
-	return responses.SendSuccessResponse(c, fiber.StatusOK, "delete successfully")
+	return responses.NewSuccessResponse(fiber.StatusOK, "Delete successfully").Send(c)
 }

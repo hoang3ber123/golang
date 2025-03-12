@@ -16,28 +16,28 @@ func EmployeeCreate(c *fiber.Ctx) error {
 
 	// Kiểm tra dữ liệu đầu vào
 	if err := serializer.IsValid(c); err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusBadRequest, err.Error())
+		return err.Send(c)
 	}
 
 	// Chuyển sang model
 	employees, err := serializer.ToModel()
 	if err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusInternalServerError, err.Error())
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, err.Error()).Send(c)
 	}
 
 	if err := db.DB.Transaction(func(tx *gorm.DB) error {
 		// Thực hiện các thao tác cơ sở dữ liệu trong giao dịch (dùng 'tx' thay vì 'db')
 		// Lưu vào database (giả sử dùng GORM)
 		if err := tx.Create(&employees).Error; err != nil {
-			return err
+			return responses.NewErrorResponse(fiber.StatusInternalServerError, err.Error()).Send(c)
 		}
 		// Trả về nil sẽ commit (xác nhận) toàn bộ giao dịch
 		return nil
 	}); err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusBadRequest, err.Error())
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, err.Error()).Send(c)
 	}
 
-	return responses.SendSuccessResponse(c, fiber.StatusOK, "Create Successfully")
+	return responses.NewSuccessResponse(fiber.StatusOK, "Create Successfully").Send(c)
 }
 
 func EmployeeList(c *fiber.Ctx) error {
@@ -47,7 +47,7 @@ func EmployeeList(c *fiber.Ctx) error {
 	params := new(models.EmployeeQuery)
 	// Lấy các tham số truy vấn từ query string
 	if err := c.QueryParser(params); err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusBadRequest, err.Error())
+		return responses.NewErrorResponse(fiber.StatusBadRequest, err.Error()).Send(c)
 	}
 
 	// Áp dụng điều kiện lọc nếu tham số không rỗng
@@ -81,16 +81,16 @@ func EmployeeList(c *fiber.Ctx) error {
 	var employees []models.Employee
 	paginator, err := pagination.PaginateWithGORM(c, query, &employees)
 	if err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusInternalServerError, "Failed to fetch: "+err.Error())
+		return err.Send(c)
 	}
 
-	return responses.SendSuccessResponse(c, fiber.StatusOK, fiber.Map{
+	return responses.NewSuccessResponse(fiber.StatusOK, fiber.Map{
 		"pagination": paginator,
 		"result":     serializers.EmployeeListResponse(&employees),
-	})
+	}).Send(c)
 }
 
 func EmployeeDetail(c *fiber.Ctx) error {
 	employee := c.Locals("employee").(*models.Employee)
-	return responses.SendSuccessResponse(c, fiber.StatusOK, serializers.EmployeeDetailResponse(employee))
+	return responses.NewSuccessResponse(fiber.StatusOK, serializers.EmployeeDetailResponse(employee)).Send(c)
 }

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -8,6 +9,7 @@ import (
 )
 
 var Config struct {
+	BasePath          string
 	DatabaseName      string
 	DatabaseUsername  string
 	DatabaseHost      string
@@ -19,6 +21,8 @@ var Config struct {
 	JWTEmployeeSecret string
 	JWTSecretMail     string
 	SMTPUsername      string
+	SMTPServer        string
+	SMTPPort          string
 	SMTPPassword      string
 	SMTPHost          string
 	APIGatewayHost    string
@@ -27,17 +31,30 @@ var Config struct {
 	ServiceUrl        string
 	ServicePath       string
 	APIKey            string
+	AllowHost         string
+	HTTPPort          string
+	GRPCPort          string
 }
 
 // Load từng file .env theo đúng mục đích
 func init() {
 	log.Println("Loading environment variables...")
+	dir, err := os.Getwd()
+	if err != nil {
+		fmt.Println("Error getting working directory:", err)
+	} else {
+		fmt.Println("Current working directory:", dir)
+	}
 	// Load từng file .env theo đúng mục đích
-	loadEnvFile("env/.env")
-	loadEnvFile("env/.env.database")
-	loadEnvFile("env/.env.redis")
-	loadEnvFile("env/.env.vstorage")
-
+	loadEnvFile(dir + "/env/.env")
+	loadEnvFile(dir + "/env/.env.database")
+	loadEnvFile(dir + "/env/.env.redis")
+	loadEnvFile(dir + "/env/.env.vstorage")
+	// System setting
+	Config.BasePath = dir
+	Config.AllowHost = os.Getenv("ALLOW_HOST")
+	Config.HTTPPort = os.Getenv("HTTP_PORT")
+	Config.GRPCPort = os.Getenv("GRPC_PORT")
 	// Database setting
 	Config.DatabaseURL = os.Getenv("DATABASE_URL")
 	Config.DatabaseName = os.Getenv("DATABASE_NAME")
@@ -60,7 +77,8 @@ func init() {
 	// SMPT setting
 	Config.SMTPUsername = os.Getenv("SMTP_USERNAME")
 	Config.SMTPPassword = os.Getenv("SMTP_PASSWORD")
-	Config.SMTPHost = os.Getenv("SMTP_HOST")
+	Config.SMTPServer = os.Getenv("SMTP_SERVER")
+	Config.SMTPPort = os.Getenv("SMTP_PORT")
 }
 
 func loadEnvFile(filepath string) {

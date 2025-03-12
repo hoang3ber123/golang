@@ -3,8 +3,8 @@ package serializers
 import (
 	"auth-service/internal/db"
 	"auth-service/internal/models"
+	"auth-service/internal/responses"
 	"auth-service/internal/services"
-	"errors"
 	"fmt"
 	"time"
 
@@ -27,40 +27,47 @@ type UserSignUpSerializer struct {
 }
 
 // Deserialize parses and validates input, including duplicate field check
-func (s *UserSignUpSerializer) IsValid(c *fiber.Ctx) error {
-	// Parse the incoming JSON into the serializer struct
+func (s *UserSignUpSerializer) IsValid(c *fiber.Ctx) *responses.ErrorResponse {
+	// Parse JSON vào struct
 	if err := c.BodyParser(s); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Invalid input: "+err.Error())
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid input: "+err.Error())
 	}
 
-	// Basic validation with go-playground/validator
+	// Xác thực cơ bản với go-playground/validator
 	validate := validator.New()
 	if err := validate.Struct(s); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Validation failed: "+err.Error())
-	}
-	// Custom validation: Check date format (YYYY-MM-DD)
-	var errTime error
-	s.Dob, errTime = time.Parse("2006-01-02", s.Dob.(string))
-	if errTime != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Invalid dob format. Use YYYY-MM-DD (e.g., 2025-02-21)")
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Validation failed: "+err.Error())
 	}
 
-	// Defined checking variables
+	// Kiểm tra định dạng ngày sinh (YYYY-MM-DD)
+	dobStr, ok := s.Dob.(string)
+	if !ok {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid dob type, must be a string")
+	}
+	parsedDob, err := time.Parse("2006-01-02", dobStr)
+	if err != nil {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid dob format. Use YYYY-MM-DD (e.g., 2025-02-21)")
+	}
+	s.Dob = parsedDob
+
+	// Kiểm tra trùng lặp Username
 	var usernameExists bool
+	if err := db.DB.Raw("SELECT EXISTS (SELECT 1 FROM users WHERE username = ?)", s.Username).Scan(&usernameExists).Error; err != nil {
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Database error checking username: "+err.Error())
+	}
+	if usernameExists {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Username already exists")
+	}
+
+	// Kiểm tra trùng lặp Email đã xác minh
 	var emailExists bool
-	// Custom validation: Check for duplicate Username in the database
-	if err := db.DB.Raw("SELECT EXISTS (SELECT 1 FROM users WHERE username = ?)", s.Username).Scan(&usernameExists).Error; err == nil && usernameExists {
-		// If a product with this name exists, return an error
-		return fiber.NewError(fiber.StatusBadRequest, "Username already exists")
+	if err := db.DB.Raw("SELECT EXISTS (SELECT 1 FROM users WHERE email = ? AND is_email_verify = true)", s.Email).Scan(&emailExists).Error; err != nil {
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Database error checking email: "+err.Error())
+	}
+	if emailExists {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Email already exists and verified")
 	}
 
-	// Custom validation: Check for duplicate Email verify in the database
-	if err := db.DB.Raw("SELECT EXISTS (SELECT 1 FROM users WHERE email = ? and is_email_verify = true)", s.Email).Scan(&emailExists).Error; err == nil && emailExists {
-		// If a product with this name exists, return an error
-		return fiber.NewError(fiber.StatusBadRequest, "Email already exists and verified")
-	}
-
-	// No duplicates found, validation passes
 	return nil
 }
 
@@ -86,29 +93,29 @@ type UserLoginSerializer struct {
 }
 
 // Deserialize parses and validates input, including duplicate field check
-func (s *UserLoginSerializer) Login(c *fiber.Ctx) (*models.User, error) {
+func (s *UserLoginSerializer) Login(c *fiber.Ctx) (*models.User, *responses.ErrorResponse) {
 	var user models.User
 	// Parse the incoming JSON into the serializer struct
 	if err := c.BodyParser(s); err != nil {
-		return nil, errors.New("Invalid input: " + err.Error())
+		return nil, responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid input: "+err.Error())
 	}
 	// Basic validation with go-playground/validator
 	validate := validator.New()
 	if err := validate.Struct(s); err != nil {
-		return nil, errors.New("Validation failed: " + err.Error())
+		return nil, responses.NewErrorResponse(fiber.StatusBadRequest, "Validation failed: "+err.Error())
 	}
 	// Custom validation: Check password compare
 	result := db.DB.First(&user, "username = ?", s.Username)
 	if result.Error != nil {
 		if result.Error == gorm.ErrRecordNotFound {
-			return nil, errors.New("user not found")
+			return nil, responses.NewErrorResponse(fiber.StatusBadRequest, "User not found")
 		}
-		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database error: "+result.Error.Error())
+		return nil, responses.NewErrorResponse(fiber.StatusInternalServerError, "Database error: "+result.Error.Error())
 	}
 
 	// Check password correctness
 	if !services.CheckPasswordHash(user.Password, s.Password) {
-		return nil, errors.New("invalid credentials")
+		return nil, responses.NewErrorResponse(fiber.StatusBadRequest, "Password or Username is incorrect")
 	}
 
 	// No error
@@ -116,29 +123,29 @@ func (s *UserLoginSerializer) Login(c *fiber.Ctx) (*models.User, error) {
 }
 
 // Deserialize parses and validates input, including duplicate field check
-func (s *UserLoginSerializer) EmployeeLogin(c *fiber.Ctx) (*models.Employee, error) {
+func (s *UserLoginSerializer) EmployeeLogin(c *fiber.Ctx) (*models.Employee, *responses.ErrorResponse) {
 	var user models.Employee
 	// Parse the incoming JSON into the serializer struct
 	if err := c.BodyParser(s); err != nil {
-		return nil, errors.New("Invalid input: " + err.Error())
+		return nil, responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid input: "+err.Error())
 	}
 	// Basic validation with go-playground/validator
 	validate := validator.New()
 	if err := validate.Struct(s); err != nil {
-		return nil, errors.New("Validation failed: " + err.Error())
+		return nil, responses.NewErrorResponse(fiber.StatusBadRequest, "Validation failed: "+err.Error())
 	}
 	// Custom validation: Check password compare
 	result := db.DB.First(&user, "username = ?", s.Username)
 	if result.Error != nil {
 		if result.Error == gorm.ErrRecordNotFound {
-			return nil, errors.New("user not found")
+			return nil, responses.NewErrorResponse(fiber.StatusBadRequest, "User not found")
 		}
-		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database error: "+result.Error.Error())
+		return nil, responses.NewErrorResponse(fiber.StatusInternalServerError, "Database error: "+result.Error.Error())
 	}
 
 	// Check password correctness
 	if !services.CheckPasswordHash(user.Password, s.Password) {
-		return nil, errors.New("invalid credentials")
+		return nil, responses.NewErrorResponse(fiber.StatusBadRequest, "Password or Username is incorrect")
 	}
 
 	// No error
@@ -165,15 +172,15 @@ type EmployeeListSignUpSerializer struct {
 	Employees []EmployeeSignUpSerializer `json:"employees" validate:"required,dive"`
 }
 
-func (s *EmployeeListSignUpSerializer) IsValid(c *fiber.Ctx) error {
+func (s *EmployeeListSignUpSerializer) IsValid(c *fiber.Ctx) *responses.ErrorResponse {
 	if err := c.BodyParser(&s); err != nil {
-		return errors.New("Invalid input: " + err.Error())
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid input: "+err.Error())
 	}
 
 	// Basic validation with go-playground/validator
 	validate := validator.New()
 	if err := validate.Struct(s); err != nil {
-		return errors.New("Validation failed: " + err.Error())
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Validation failed: "+err.Error())
 	}
 
 	return nil

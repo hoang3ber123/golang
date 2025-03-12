@@ -5,6 +5,7 @@ import (
 	"auth-service/internal/db"
 	"auth-service/internal/models"
 	"auth-service/internal/responses"
+	"auth-service/internal/services"
 	"fmt"
 	"log"
 	"time"
@@ -97,73 +98,23 @@ func JWTAuthMiddleware(c *fiber.Ctx) error {
 }
 
 func JWTAuthEmployeeMiddleware(c *fiber.Ctx) error {
-	// Get secret key
-	secretKey := config.Config.JWTEmployeeSecret
-	if secretKey == "" {
-		log.Println("Warning: JWTEmployeeSecret is empty")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"message": "Server misconfiguration",
-		})
-	}
 	// sample token string taken from the New example
 	tokenString := c.Cookies("Authorization-employee")
-
-	// if don't have token in cookie
-	if tokenString == "" {
-		log.Println("Warning: tokenString is empty")
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"message": "Unauthorized",
-		})
-	}
-
-	// Parse token
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return []byte(secretKey), nil
-	})
+	// Check employee authenticated
+	id, err := services.IsEmployeeAuthenticated(tokenString)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"message": "Invalid token",
-		})
-	}
-
-	// Check token claims
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok || !token.Valid {
-		log.Println("Warning: claims is not valid")
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"message": "Unauthorized",
-		})
-	}
-
-	// Check token expiration
-	exp, ok := claims["exp"].(float64)
-	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"message": "Token does not contain expiration",
-		})
-	}
-	if time.Now().Unix() > int64(exp) {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"message": "Token is expired",
-		})
+		return err.Send(c)
 	}
 
 	// Find user
 	var user models.Employee
-	db.DB.Joins("Role").First(&user, "employees.id = ?", claims["sub"])
+	db.DB.Joins("Role").First(&user, "employees.id = ?", id)
 	if user.ID == uuid.Nil {
-		log.Printf("Warning: Can not find user %s", claims["sub"])
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"message": "Unauthorized",
-		})
+		log.Println("Warning: Can not find employee")
+		return responses.NewErrorResponse(fiber.StatusUnauthorized, "Unauthorized").Send(c)
 	}
 	if !user.IsActive {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"message": "Your account is blocked or unactived",
-		})
+		return responses.NewErrorResponse(fiber.StatusUnauthorized, "Your account is blocked or unactived").Send(c)
 	}
 	// Store user info in context for later use
 	c.Locals("employee", &user)
@@ -187,6 +138,6 @@ func RestrictRoleMiddlware(allowedRoles ...string) fiber.Handler {
 		}
 
 		// Trả về lỗi nếu không có quyền
-		return responses.SendErrorResponse(c, fiber.StatusForbidden, "You don't have permission")
+		return responses.NewErrorResponse(fiber.StatusForbidden, "You don't have permission").Send(c)
 	}
 }

@@ -3,7 +3,7 @@ package serializers
 import (
 	"auth-service/internal/db"
 	"auth-service/internal/models"
-	"errors"
+	"auth-service/internal/responses"
 
 	"github.com/go-playground/validator"
 	"github.com/gofiber/fiber/v2"
@@ -15,29 +15,38 @@ type RoleCreateSerializer struct {
 	Title string `json:"title" validate:"required"`
 }
 
-func (s *RoleCreateSerializer) IsValid(c *fiber.Ctx) error {
+func (s *RoleCreateSerializer) IsValid(c *fiber.Ctx) *responses.ErrorResponse {
 	// Parse body to struct
 	if err := c.BodyParser(s); err != nil {
-		return errors.New("Invalid input: " + err.Error())
-	}
-	// Basic validation with go-playground/validator
-	validate := validator.New()
-	if err := validate.Struct(s); err != nil {
-		return errors.New("Validation failed: " + err.Error())
-	}
-	// Custom validation: Check title is admin manager
-	invalidTitles := map[string]bool{"admin": true, "manager": true, "employee": true} // init sets
-	if invalidTitles[s.Title] {
-		return errors.New("Title is not valid: " + s.Title)
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid input: "+err.Error())
 	}
 
-	// Custom validation: Check for duplicate Title in the database
-	var titleExists bool
-	if err := db.DB.Raw("SELECT EXISTS (SELECT 1 FROM roles WHERE title = ?)", s.Title).Scan(&titleExists).Error; err == nil && titleExists {
-		// If a product with this name exists, return an error
-		return errors.New("title already exists")
+	// Basic validation với go-playground/validator
+	validate := validator.New()
+	if err := validate.Struct(s); err != nil {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Validation failed: "+err.Error())
 	}
-	//
+
+	// Custom validation: Check title không nằm trong danh sách không hợp lệ
+	invalidTitles := map[string]bool{
+		"admin":    true,
+		"manager":  true,
+		"employee": true,
+	}
+	if invalidTitles[s.Title] {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Title is not valid: "+s.Title)
+	}
+
+	// Custom validation: Check trùng lặp Title trong database
+	var titleExists bool
+	if err := db.DB.Raw("SELECT EXISTS (SELECT 1 FROM roles WHERE title = ?)", s.Title).Scan(&titleExists).Error; err != nil {
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Database error: "+err.Error())
+	}
+	if titleExists {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Title already exists: "+s.Title)
+	}
+
+	// Nếu không có lỗi, trả về nil
 	return nil
 }
 
@@ -54,42 +63,48 @@ type RoleUpdateSerializer struct {
 	Title string `json:"title"`
 }
 
-func (s *RoleUpdateSerializer) IsValid(c *fiber.Ctx) error {
+func (s *RoleUpdateSerializer) IsValid(c *fiber.Ctx) *responses.ErrorResponse {
 	// Parse body to struct
 	if err := c.BodyParser(s); err != nil {
-		return errors.New("Invalid input: " + err.Error())
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid input: "+err.Error())
 	}
 	// Basic validation with go-playground/validator
 	validate := validator.New()
 	if err := validate.Struct(s); err != nil {
-		return errors.New("Validation failed: " + err.Error())
-
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Validation failed: "+err.Error())
 	}
 
 	// Custom validation: Check title is admin manager
 	invalidTitles := map[string]bool{"admin": true, "manager": true, "employee": true} // init sets
 	if invalidTitles[s.Title] {
-		return errors.New("Title is not valid: " + s.Title)
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Title is not valid: "+s.Title)
 	}
 
-	// Custom validation: Check for duplicate Title in the database
+	// Custom validation: Check trùng lặp Title trong database
 	var titleExists bool
-	if err := db.DB.Raw("SELECT EXISTS (SELECT 1 FROM roles WHERE title = ?)", s.Title).Scan(&titleExists).Error; err == nil && titleExists {
-		// If a product with this name exists, return an error
-		return errors.New("title already exists")
+	if err := db.DB.Raw("SELECT EXISTS (SELECT 1 FROM roles WHERE title = ?)", s.Title).Scan(&titleExists).Error; err != nil {
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Database error: "+err.Error())
+	}
+	if titleExists {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Title already exists: "+s.Title)
 	}
 	//
 	return nil
 }
 
 // Change validate data to instance
-func (s *RoleUpdateSerializer) Update(instance *models.Role) error {
-	if err := copier.Copy(&instance, &s); err != nil {
-		return err
+func (s *RoleUpdateSerializer) Update(instance *models.Role) *responses.ErrorResponse {
+	// Sao chép dữ liệu từ serializer sang instance
+	if err := copier.Copy(instance, s); err != nil {
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Failed to copy data: "+err.Error())
 	}
-	if err := db.DB.Save(&instance).Error; err != nil {
-		return err
+
+	// Lưu thay đổi vào database
+	if err := db.DB.Save(instance).Error; err != nil {
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Failed to update role: "+err.Error())
 	}
+
+	// Trả về nil nếu thành công
 	return nil
 }
 
@@ -138,29 +153,35 @@ type RoleDeleteSerializer struct {
 	IDs []string `json:"ids" validate:"required,dive,uuid_rfc4122"`
 }
 
-func (s *RoleDeleteSerializer) IsValid(c *fiber.Ctx) error {
+func (s *RoleDeleteSerializer) IsValid(c *fiber.Ctx) *responses.ErrorResponse {
 	// Parse body to struct
 	if err := c.BodyParser(s); err != nil {
-		return errors.New("Invalid input: " + err.Error())
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid input: "+err.Error())
 	}
 	// Basic validation with go-playground/validator
 	validate := validator.New()
 	if err := validate.Struct(s); err != nil {
-		return errors.New("Validation failed: " + err.Error())
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Validation failed: "+err.Error())
 	}
 
 	//
 	return nil
 }
 
-func (s *RoleDeleteSerializer) Delete() error {
+func (s *RoleDeleteSerializer) Delete() *responses.ErrorResponse {
 	slugTitles := []string{"admin", "manager", "employee"}
 
-	result := db.DB.Where("id IN (?) and slug NOT IN (?)", s.IDs, slugTitles).Delete(&models.Role{})
+	// Thực hiện xóa các role có ID trong s.IDs và slug không nằm trong slugTitles
+	result := db.DB.Where("id IN (?) AND slug NOT IN (?)", s.IDs, slugTitles).Delete(&models.Role{})
+	if result.Error != nil {
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Failed to delete roles: "+result.Error.Error())
+	}
+
 	// Kiểm tra nếu không có bản ghi nào bị xóa
 	if result.RowsAffected == 0 {
-		return errors.New("no matching roles found")
+		return responses.NewErrorResponse(fiber.StatusNotFound, "No matching roles found to delete")
 	}
-	//
+
+	// Trả về nil nếu thành công
 	return nil
 }

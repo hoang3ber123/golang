@@ -1,0 +1,51 @@
+services:
+  product-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: product_service
+    ports:
+      - "8081:8081"
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASSWORD=Admin@123
+      - DB_NAME=productservice
+      - DB_PORT=3306
+    networks:
+      - kong-network
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  db:
+    image: mariadb:latest
+    container_name: productdb
+    environment:
+      - MYSQL_ROOT_PASSWORD=Admin@123
+      - MYSQL_DATABASE=productservice
+    ports:
+      - "3308:3306"
+    networks:
+      - kong-network
+    volumes:
+      - product_data:/var/lib/mysql
+    restart: unless-stopped
+  
+  redis:
+    image: redis:latest
+    container_name: redis
+    command: ["redis-server", "--requirepass", "Admin@123"]
+    ports:
+      - "6379:6379"
+    networks:
+      - kong-network
+    restart: unless-stopped
+
+volumes:
+  product_data:
+
+networks:
+  kong-network:
+    external: true

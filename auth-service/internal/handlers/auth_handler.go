@@ -20,13 +20,14 @@ func SignUp(c *fiber.Ctx) error {
 
 	serializer := new(serializers.UserSignUpSerializer)
 	if err := serializer.IsValid(c); err != nil {
-		return err // Error is already formatted by Deserialize
+		return err.Send(c) // Error is already formatted by Deserialize
 	}
 
 	// Serializer to model
 	user := serializer.ToModel()
 	if err := db.DB.Create(&user).Error; err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusInternalServerError, "Failed to create product")
+		// Create error
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, err.Error()).Send(c)
 	}
 
 	// Send verify email
@@ -35,7 +36,8 @@ func SignUp(c *fiber.Ctx) error {
 	}()
 
 	// Response
-	return responses.SendSuccessResponse(c, fiber.StatusCreated, "User register successfully, please verify email to active account")
+	return responses.NewSuccessResponse(fiber.StatusCreated,
+		"User register successfully, please verify email to active account").Send(c)
 }
 
 func VerifyEmail(c *fiber.Ctx) error {
@@ -43,7 +45,7 @@ func VerifyEmail(c *fiber.Ctx) error {
 	tokenString := c.Params("token")
 	// if don't have token in cookie
 	if tokenString == "" {
-		return responses.SendErrorResponse(c, fiber.StatusBadRequest, "Invalid token")
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid token").Send(c)
 	}
 	// Parse token
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
@@ -53,36 +55,36 @@ func VerifyEmail(c *fiber.Ctx) error {
 		return []byte(config.Config.JWTSecretMail), nil
 	})
 	if err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusBadRequest, "Invalid token")
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid token").Send(c)
 	}
 	// Check token claims
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok || !token.Valid {
-		return responses.SendErrorResponse(c, fiber.StatusBadRequest, "Invalid token")
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid token").Send(c)
 	}
 	// Check token expiration
 	exp, ok := claims["exp"].(float64)
 	if !ok {
-		return responses.SendErrorResponse(c, fiber.StatusBadRequest, "Invalid token claims")
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid token claims").Send(c)
 	}
 	if time.Now().Unix() > int64(exp) {
-		return responses.SendErrorResponse(c, fiber.StatusBadRequest, "Token is expired")
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Token is expired").Send(c)
 	}
 	// Lấy user ID từ token
 	sub, ok := claims["sub"].(string)
 	if !ok {
-		return responses.SendErrorResponse(c, fiber.StatusUnauthorized, "Invalid token payload")
+		return responses.NewErrorResponse(fiber.StatusUnauthorized, "Invalid token payload").Send(c)
 	}
 	userID, err := uuid.Parse(sub)
 	if err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusUnauthorized, "Invalid user ID")
+		return responses.NewErrorResponse(fiber.StatusUnauthorized, "Invalid user ID").Send(c)
 	}
 	// Cập nhật trạng thái xác thực email trong database
 	result := db.DB.Model(&models.User{}).Where("id = ? AND is_email_verify = false", userID).Update("is_email_verify", true)
 	if result.RowsAffected == 0 {
-		return responses.SendErrorResponse(c, fiber.StatusNotFound, "User not found or already verified") // Error is already formatted by Deserialize
+		return responses.NewErrorResponse(fiber.StatusNotFound, "User not found or already verified").Send(c) // Error is already formatted by Deserialize
 	}
-	return responses.SendSuccessResponse(c, fiber.StatusOK, "Email verified successfully")
+	return responses.NewSuccessResponse(fiber.StatusOK, "Email verified successfully").Send(c)
 }
 
 func Login(c *fiber.Ctx) error {
@@ -91,7 +93,7 @@ func Login(c *fiber.Ctx) error {
 	// Validate request
 	user, err := serializer.Login(c)
 	if err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusBadRequest, err.Error()) // Error is already formatted by Deserialize
+		return err.Send(c)
 	}
 	// Generate jwt token
 	tokenString, _ := services.GenerateJWT(user.ID)
@@ -105,7 +107,7 @@ func Login(c *fiber.Ctx) error {
 		SameSite: "None", // Cho phép gửi với mọi request cross-site
 	})
 	// Response
-	return responses.SendSuccessResponse(c, fiber.StatusOK, "Login succesfully")
+	return responses.NewSuccessResponse(fiber.StatusOK, "Login succesfully").Send(c)
 }
 
 func Logout(c *fiber.Ctx) error {
@@ -116,7 +118,7 @@ func Logout(c *fiber.Ctx) error {
 
 	c.Cookie(cookie)
 
-	return responses.SendSuccessResponse(c, fiber.StatusOK, "Sign out successfully")
+	return responses.NewSuccessResponse(fiber.StatusOK, "Sign out successfully").Send(c)
 }
 
 func EmployeeLogin(c *fiber.Ctx) error {
@@ -125,10 +127,11 @@ func EmployeeLogin(c *fiber.Ctx) error {
 	// Validate request
 	user, err := serializer.EmployeeLogin(c)
 	if err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusUnauthorized, err.Error())
+		return err.Send(c)
 	}
 	// Generate jwt token
 	tokenString, _ := services.GenerateEmployeeJWT(user.ID)
+	fmt.Printf("token string: %s", tokenString)
 	// Setting tokenString to cookies
 	c.Cookie(&fiber.Cookie{
 		Name:     "Authorization-employee",
@@ -139,7 +142,7 @@ func EmployeeLogin(c *fiber.Ctx) error {
 		SameSite: "None", // Cho phép gửi với mọi request cross-site
 	})
 	// Response
-	return responses.SendSuccessResponse(c, fiber.StatusOK, "Login succesfully")
+	return responses.NewSuccessResponse(fiber.StatusOK, "Login succesfully").Send(c)
 }
 
 func EmployeeLogout(c *fiber.Ctx) error {
@@ -150,22 +153,22 @@ func EmployeeLogout(c *fiber.Ctx) error {
 
 	c.Cookie(cookie)
 
-	return responses.SendSuccessResponse(c, fiber.StatusOK, "Sign out successfully")
+	return responses.NewSuccessResponse(fiber.StatusOK, "Sign out successfully").Send(c)
 }
 
 func EmployeeSignUp(c *fiber.Ctx) error {
 
 	serializer := new(serializers.UserSignUpSerializer)
 	if err := serializer.IsValid(c); err != nil {
-		return err // Error is already formatted by Deserialize
+		return err.Send(c) // Error is already formatted by Deserialize
 	}
 
 	// Serializer to model
 	user := serializer.ToModel()
 	if err := db.DB.Create(&user).Error; err != nil {
-		return responses.SendErrorResponse(c, fiber.StatusInternalServerError, "Failed to create product")
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, err.Error()).Send(c)
 	}
 
 	// Response
-	return responses.SendSuccessResponse(c, fiber.StatusCreated, "Create successfully")
+	return responses.NewSuccessResponse(fiber.StatusCreated, "Create successfully").Send(c)
 }
