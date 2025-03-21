@@ -1,7 +1,6 @@
 package pagination
 
 import (
-	"fmt"
 	"product-service/internal/responses"
 
 	"github.com/gofiber/fiber/v2"
@@ -46,7 +45,7 @@ func PaginateWithGORM[T any](c *fiber.Ctx, query *gorm.DB, modelDest *[]T) (*Pag
 		return nil, responses.NewErrorResponse(fiber.StatusInternalServerError, "Failed to count records: "+err.Error())
 	}
 	if total == 0 {
-		return nil, responses.NewErrorResponse(fiber.StatusNotFound, "No objects found")
+		return p, nil
 	}
 
 	// Set pagination metadata
@@ -55,7 +54,7 @@ func PaginateWithGORM[T any](c *fiber.Ctx, query *gorm.DB, modelDest *[]T) (*Pag
 
 	// Check if page exceeds total pages
 	if p.Page > p.TotalPage {
-		return nil, responses.NewErrorResponse(fiber.StatusBadRequest, fmt.Sprintf("Page %d exceeds total pages %d", p.Page, p.TotalPage))
+		return p, nil
 	}
 
 	// Fetch data

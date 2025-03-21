@@ -1,8 +1,7 @@
 package pagination
 
 import (
-	"fmt"
-	"product-service/internal/responses"
+	"order-service/internal/responses"
 
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
@@ -46,7 +45,7 @@ func PaginateWithGORM[T any](c *fiber.Ctx, query *gorm.DB, modelDest *[]T) (*Pag
 		return nil, responses.NewErrorResponse(fiber.StatusInternalServerError, "Failed to count records: "+err.Error())
 	}
 	if total == 0 {
-		return nil, responses.NewErrorResponse(fiber.StatusNotFound, "No objects found")
+		return p, nil
 	}
 
 	// Set pagination metadata
@@ -55,7 +54,52 @@ func PaginateWithGORM[T any](c *fiber.Ctx, query *gorm.DB, modelDest *[]T) (*Pag
 
 	// Check if page exceeds total pages
 	if p.Page > p.TotalPage {
-		return nil, responses.NewErrorResponse(fiber.StatusBadRequest, fmt.Sprintf("Page %d exceeds total pages %d", p.Page, p.TotalPage))
+		return p, nil
+	}
+
+	// Fetch data
+	if err := query.Limit(p.PageSize).Offset(offset).Find(modelDest).Error; err != nil {
+		return nil, responses.NewErrorResponse(fiber.StatusInternalServerError, "Failed to fetch data: "+err.Error())
+	}
+
+	// Return pagination info
+	return p, nil
+}
+
+// PaginateWithGORM handles pagination with optional custom query scope
+func Paginate[T any](page, pageSize int, query *gorm.DB, modelDest *[]T) (*Pagination, *responses.ErrorResponse) {
+	// Parse pagination params
+	p := &Pagination{}
+
+	// Set bounds
+	p.Page = page
+	p.PageSize = pageSize
+	if p.Page < 1 {
+		p.Page = 1
+	}
+	if p.PageSize < 1 || p.PageSize > 100 {
+		p.PageSize = 10
+	}
+
+	// Calculate offset
+	offset := (p.Page - 1) * p.PageSize
+
+	// Get total count
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, responses.NewErrorResponse(fiber.StatusInternalServerError, "Failed to count records: "+err.Error())
+	}
+	if total == 0 {
+		return p, nil
+	}
+
+	// Set pagination metadata
+	p.Total = int(total)
+	p.TotalPage = (p.Total + p.PageSize - 1) / p.PageSize
+
+	// Check if page exceeds total pages
+	if p.Page > p.TotalPage {
+		return p, nil
 	}
 
 	// Fetch data

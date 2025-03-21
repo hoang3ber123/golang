@@ -5,7 +5,6 @@ import (
 	"auth-service/internal/models"
 	"auth-service/internal/services"
 	"context"
-	"fmt"
 	"log"
 	"slices"
 
@@ -20,13 +19,12 @@ type AuthServiceServer struct {
 }
 
 // Xác thực token từ Product Service
-func (s *AuthServiceServer) Authorizate(ctx context.Context, req *auth_proto.AuthRequest) (*auth_proto.AuthResponse, error) {
+func (s *AuthServiceServer) AuthenticateEmployee(ctx context.Context, req *auth_proto.AuthEmployeeRequest) (*auth_proto.AuthEmployeeResponse, error) {
 	tokenString := req.Token // get token
-	fmt.Println("token string authorizate: " + tokenString)
 	// Check employee authenticated
 	id, err := services.IsEmployeeAuthenticated(tokenString)
 	if err != nil {
-		return &auth_proto.AuthResponse{
+		return &auth_proto.AuthEmployeeResponse{
 			IsAuthenticated: false,
 			Error:           err.Message,
 			StatusCode:      500,
@@ -39,7 +37,7 @@ func (s *AuthServiceServer) Authorizate(ctx context.Context, req *auth_proto.Aut
 	// check if can find employee
 	if user.ID == uuid.Nil {
 		log.Println("Warning: Can not find employee")
-		return &auth_proto.AuthResponse{
+		return &auth_proto.AuthEmployeeResponse{
 			IsAuthenticated: false,
 			Error:           "Unauthorized",
 			StatusCode:      401,
@@ -48,7 +46,7 @@ func (s *AuthServiceServer) Authorizate(ctx context.Context, req *auth_proto.Aut
 	}
 	// check role
 	if !slices.Contains(req.Role, user.Role.Title) {
-		return &auth_proto.AuthResponse{
+		return &auth_proto.AuthEmployeeResponse{
 			IsAuthenticated: false,
 			Error:           "Forbiden",
 			StatusCode:      403,
@@ -57,7 +55,7 @@ func (s *AuthServiceServer) Authorizate(ctx context.Context, req *auth_proto.Aut
 	}
 	// check if user is active
 	if !user.IsActive {
-		return &auth_proto.AuthResponse{
+		return &auth_proto.AuthEmployeeResponse{
 			IsAuthenticated: false,
 			Error:           "Blocked/Unactivated",
 			StatusCode:      403,
@@ -65,11 +63,11 @@ func (s *AuthServiceServer) Authorizate(ctx context.Context, req *auth_proto.Aut
 		}, nil
 	}
 
-	return &auth_proto.AuthResponse{
+	return &auth_proto.AuthEmployeeResponse{
 		IsAuthenticated: true,
 		StatusCode:      200,
 		Error:           "",
-		User: &auth_proto.User{
+		User: &auth_proto.Employee{
 			Id:          user.ID.String(),
 			Username:    user.Username,
 			RoleTitle:   user.Role.Title,
@@ -78,6 +76,63 @@ func (s *AuthServiceServer) Authorizate(ctx context.Context, req *auth_proto.Aut
 			Name:        user.Name,
 			PhoneNumber: user.PhoneNumber,
 			IsActive:    user.IsActive,
+		},
+	}, nil
+}
+
+// Xác thực token từ Product Service
+func (s *AuthServiceServer) AuthenticateUser(ctx context.Context, req *auth_proto.AuthUserRequest) (*auth_proto.AuthUserResponse, error) {
+	tokenString := req.Token // get token
+	// Check employee authenticated
+	id, err := services.IsUserAuthenticated(tokenString)
+	if err != nil {
+		return &auth_proto.AuthUserResponse{
+			IsAuthenticated: false,
+			Error:           err.Message,
+			StatusCode:      500,
+			User:            nil,
+		}, nil
+	}
+	// Find user
+	var user models.User
+	db.DB.First(&user, "id = ?", id)
+	// check if can find employee
+	if user.ID == uuid.Nil {
+		return &auth_proto.AuthUserResponse{
+			IsAuthenticated: false,
+			Error:           "Unauthorized",
+			StatusCode:      401,
+			User:            nil,
+		}, nil
+	}
+	// check if user is active
+	if !user.IsEmailVerify {
+		return &auth_proto.AuthUserResponse{
+			IsAuthenticated: false,
+			Error:           "You still not verify your email",
+			StatusCode:      401,
+			User:            nil,
+		}, nil
+	}
+
+	// check if user is active
+	if !user.IsActive {
+		return &auth_proto.AuthUserResponse{
+			IsAuthenticated: false,
+			Error:           "Blocked/Unactivated",
+			StatusCode:      403,
+			User:            nil,
+		}, nil
+	}
+	return &auth_proto.AuthUserResponse{
+		IsAuthenticated: true,
+		StatusCode:      200,
+		Error:           "",
+		User: &auth_proto.User{
+			Id:       user.ID.String(),
+			Username: user.Username,
+			Email:    user.Email,
+			Name:     user.Name,
 		},
 	}, nil
 }

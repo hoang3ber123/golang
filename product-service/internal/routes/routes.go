@@ -21,6 +21,8 @@ func SetupRoutes(app *fiber.App) {
 	// Product group
 	productRoutes := api.Group("product")
 	productRoutes.Post("/", middleware.AuthEmployeeMiddleware("admin"), handlers.ProductCreate)
+	productRoutes.Get("/:id/download", middleware.AuthUserMiddleware, handlers.ProductDownload)
+	productRoutes.Get("/order/bought", middleware.AuthUserMiddleware, handlers.ProductFromOrder)
 	productRoutes.Patch("/:id", middleware.AuthEmployeeMiddleware("admin"), handlers.ProductUpdate)
 	productRoutes.Delete("/", middleware.AuthEmployeeMiddleware("admin"), handlers.ProductDelete)
 	productRoutes.Get("/", handlers.ProductList)

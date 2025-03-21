@@ -20,7 +20,7 @@ services:
 
   db:
     image: mariadb:latest
-    container_name: mariadb
+    container_name: authdb
     environment:
       - MYSQL_ROOT_PASSWORD=Admin@123
       - MYSQL_DATABASE=authservice
@@ -29,11 +29,11 @@ services:
     networks:
       - kong-network
     volumes:
-      - mariadb_data:/var/lib/mysql
+      - auth_data:/var/lib/mysql
     restart: unless-stopped
 
 volumes:
-  mariadb_data:
+  auth_data:
 
 networks:
   kong-network:

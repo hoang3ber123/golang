@@ -70,10 +70,13 @@ func RoleList(c *fiber.Ctx) error {
 	if err != nil {
 		return err.Send(c)
 	}
-
+	var result interface{}
+	if roles != nil {
+		result = serializers.RoleListResponse(&roles)
+	}
 	return responses.NewSuccessResponse(fiber.StatusOK, fiber.Map{
 		"pagination": paginator,
-		"result":     serializers.RoleListResponse(&roles),
+		"result":     result,
 	}).Send(c)
 }
 

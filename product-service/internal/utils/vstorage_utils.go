@@ -2,13 +2,18 @@ package vstorage
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"product-service/config"
 	"product-service/internal/db"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,6 +46,7 @@ type AuthRequest struct {
 	} `json:"auth"`
 }
 
+// Authorize vstorage and save X-Auth-Token to Redis Cache for 1 hour
 func AuthVstorage() (string, error) {
 	fmt.Println("Xử lý ở AuthVstorage")
 	// Get XAuthToken from redis
@@ -105,7 +111,6 @@ func AuthVstorage() (string, error) {
 
 // PushFileToVoStorage uploads a file to VStorage
 func PushFileToVStorage(XAuthToken string, file *multipart.FileHeader, directory string) (directoryPath string, uploadPath string, err error) {
-	fmt.Println("Xử lý ở PushFileToVStorage")
 	// Get binary content from file
 	fileOpened, err := file.Open()
 	if err != nil {
@@ -120,6 +125,54 @@ func PushFileToVStorage(XAuthToken string, file *multipart.FileHeader, directory
 	// Create url to push file
 	directoryPath = fmt.Sprintf("%s/%s", directory, fileName)
 	uploadPath = fmt.Sprintf("%s/%s", config.Config.VstorageBaseURL, directoryPath)
+
+	// Create PUT request
+	req, err := http.NewRequest("PUT", uploadPath, fileOpened)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Config header
+	req.Header.Set("X-Auth-Token", XAuthToken)
+	req.Header.Set("Content-Type", contentType)
+
+	// Call request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+
+	// Check response
+	if resp.StatusCode == http.StatusCreated { // 201 Created
+		return directoryPath, uploadPath, nil
+	} else {
+		body, _ := io.ReadAll(resp.Body)
+		return "", "", fmt.Errorf("unexpected status code: %d, response: %s", resp.StatusCode, string(body))
+	}
+}
+
+// PushFileToVoStorage uploads a file to VStorage
+func PushFileToDownloadVStorage(XAuthToken string, file *multipart.FileHeader, directory string) (directoryPath string, uploadPath string, err error) {
+	// Get binary content from file
+	fileOpened, err := file.Open()
+	if err != nil {
+		return "", "", fmt.Errorf("cannot open file: %v", err)
+	}
+	defer fileOpened.Close()
+
+	// Get filename and content type
+	fileName := file.Filename
+	contentType := file.Header.Get("Content-Type")
+
+	// Create url to push file
+	vstorageUrl := config.Config.VstorageURL
+	account := config.Config.VstorageAccount
+	container := config.Config.VstorageDownloadContainer
+	baseURL := fmt.Sprintf("%s/v1/%s/%s", vstorageUrl, account, container)
+	directoryPath = fmt.Sprintf("%s/%s", directory, fileName)
+	uploadPath = fmt.Sprintf("%s/%s", baseURL, directoryPath)
 
 	// Create PUT request
 	req, err := http.NewRequest("PUT", uploadPath, fileOpened)
@@ -192,4 +245,76 @@ func BulkDeleteFileFromVstorage(XAuthToken string, files []string) error {
 	}
 	fmt.Println("Response:", string(respBody))
 	return nil
+}
+
+func SetSecretKey(XAuthToken string) error {
+	// Tạo URL API Metadata
+	vstorageUrl := config.Config.VstorageURL
+	account := config.Config.VstorageAccount
+	container := config.Config.VstorageDownloadContainer
+	secretKey := config.Config.VstorageDownloadContainerSecretKey
+	// Tạo URL API
+	apiURL := fmt.Sprintf("%s/v1/%s/%s", vstorageUrl, account, container)
+
+	// Tạo request PUT để đặt Secret Key
+	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer([]byte("")))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Auth-Token", XAuthToken)
+	req.Header.Set("X-Container-Meta-Temp-URL-Key", secretKey)
+
+	// Gửi request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Debug Response
+	body, _ := io.ReadAll(resp.Body)
+	fmt.Println("Response Status:", resp.Status)
+	fmt.Println("Response Body:", string(body))
+
+	if resp.StatusCode == 401 {
+		return fmt.Errorf("lỖI 401: Token hết hạn hoặc không có quyền truy cập")
+	}
+
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("lỗi đặt Secret Key, mã lỗi: %d", resp.StatusCode)
+	}
+
+	fmt.Println("✅ Đã đặt Secret Key thành công!")
+
+	return nil
+}
+
+// GenerateTempURL tạo Temp URL cho object trong VStorage
+func GenerateTempURL(file string) string {
+	// Tạo URL API Metadata
+	vstorageUrl := config.Config.VstorageURL
+	account := config.Config.VstorageAccount
+	container := config.Config.VstorageDownloadContainer
+	secretKey := config.Config.VstorageDownloadContainerSecretKey
+	expiresIn, _ := strconv.ParseInt(config.Config.VstorageDownloadExpires, 10, 64)
+	// Thời gian hết hạn (Unix timestamp)
+	expires := time.Now().Unix() + expiresIn
+
+	// Tạo đường dẫn object
+	path := fmt.Sprintf("/v1/%s/%s/%s", account, container, file)
+
+	// Tạo chuỗi chữ ký
+	signingString := fmt.Sprintf("GET\n%d\n%s", expires, path)
+
+	// Tạo HMAC-SHA1 chữ ký
+	h := hmac.New(sha1.New, []byte(secretKey))
+	h.Write([]byte(signingString))
+	signature := hex.EncodeToString(h.Sum(nil))
+
+	// Encode URL
+	tempURL := fmt.Sprintf("%s%s?temp_url_sig=%s&temp_url_expires=%d",
+		vstorageUrl, path, url.QueryEscape(signature), expires)
+
+	return tempURL
 }

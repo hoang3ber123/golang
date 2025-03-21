@@ -18,11 +18,11 @@ import (
 
 // Valid extend
 var allowedExtensions = map[string]string{
-	".jpg": "image", ".jpeg": "image", ".png": "image", ".gif": "image",
+	".jpg": "image", ".jpeg": "image", ".png": "image", ".gif": "image", ".webp": "image",
 	".bmp": "image", ".svg": "image", // Image
 	".mp4": "file_video", ".mov": "file_video", ".avi": "file_video",
 	".wmv": "file_video", ".flv": "file_video", ".mkv": "file_video", // Video
-	".zip": "file.zip", ".rar": "file.zip", // Extract file
+	".zip": "download_file", ".rar": "download_file", // Extract file
 }
 
 // SanitizeFileName: Remove special char in file name
@@ -62,7 +62,14 @@ func BulkCreateMedia(files []*multipart.FileHeader, relatedID uuid.UUID, related
 		file.Filename = fmt.Sprintf("%s_%d%s", file.Filename, timestamp, ext)
 
 		// Push file
-		dirPath, _, _ := internal_utils.PushFileToVStorage(XAuthToken, file, directory)
+		dirPath := ""
+		if fileType != "download_file" {
+			dirPath, _, _ = internal_utils.PushFileToVStorage(XAuthToken, file, directory)
+			fmt.Println("image:", dirPath)
+		} else {
+			dirPath, _, _ = internal_utils.PushFileToDownloadVStorage(XAuthToken, file, directory)
+			fmt.Println("download_file:", dirPath)
+		}
 
 		// Append new model to medias list
 		medias[media_index] = models.Media{

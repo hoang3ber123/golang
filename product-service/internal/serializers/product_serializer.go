@@ -2,11 +2,14 @@ package serializers
 
 import (
 	"fmt"
+	"path/filepath"
 	"product-service/config"
 	"product-service/internal/db"
 	"product-service/internal/models"
 	"product-service/internal/responses"
 	"product-service/internal/services"
+	"strings"
+	"time"
 
 	"github.com/go-playground/validator"
 	"github.com/gofiber/fiber/v2"
@@ -52,6 +55,26 @@ func (s *ProductCreateSerializer) IsValid(c *fiber.Ctx) *responses.ErrorResponse
 	}
 	if count != len(s.Categories) {
 		return responses.NewErrorResponse(fiber.StatusBadRequest, "Some categories do not exist")
+	}
+
+	// Kiểm tra file
+	form, err := c.MultipartForm()
+	if err != nil {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Cannot parse form")
+	}
+	files := form.File["files"]
+	// Kiểm tra chỉ có đúng một file có phần mở rộng .zip hoặc .rar
+	archiveCount := 0
+	for _, file := range files {
+		ext := strings.ToLower(filepath.Ext(file.Filename))
+		if ext == ".zip" || ext == ".rar" {
+			archiveCount++
+		}
+	}
+	if archiveCount == 0 {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "At least one file must have a .zip or .rar extension")
+	} else if archiveCount > 1 {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Only one .zip or .rar file is allowed")
 	}
 
 	// Nếu không có lỗi, trả về nil
@@ -109,7 +132,7 @@ func ProductDetailResponse(instance *models.Product) *ProductDetailResponseSeria
 	categories := CategoryListResponse(&instance.Categories)
 	// Xử lý danh sách media
 	var mediaList []models.Media
-	db.DB.Where("related_id = ? AND related_type = ? AND status = 'using'", instance.ID, instance.GetRelatedType()).Find(&mediaList)
+	db.DB.Where("related_id = ? AND related_type = ? AND file_type ='image' AND status = 'using'", instance.ID, instance.GetRelatedType()).Find(&mediaList)
 	medias := MediaListResponse(&mediaList)
 	// Xử lý trường nullable (Link, Price)
 	var link string
@@ -194,16 +217,20 @@ func ProductListResponse(instance *[]models.Product) []ProductListResponseSerial
 	}
 
 	// 🔥 Truy vấn media (Lấy tối đa 3 media cho mỗi product)
-	queryMedia := `
+	relatedType := "products" // bảng mà media chứa ảnh
+	status := "using"         // media đang sử dụng
+	maxRowNum := 3            // Số lượng media tối đa cho mỗi product
+	file_type := "image"      // kiểu file
+	queryMedia := fmt.Sprintf(`
 WITH ranked_media AS (
     SELECT 
         m.id, m.file, m.file_type, m.related_id AS product_id,
         ROW_NUMBER() OVER (PARTITION BY m.related_id ORDER BY m.id) AS row_num
     FROM media m
-    WHERE m.related_id IN (?) AND m.related_type = 'product' AND m.status = 'using'
+    WHERE m.related_id IN (?) AND m.related_type = '%s' AND m.status = '%s' AND m.file_type = '%s'
 )
-SELECT id, file, file_type, product_id FROM ranked_media WHERE row_num <= 3;
-`
+SELECT id, file, file_type, product_id FROM ranked_media WHERE row_num <= %d;
+`, relatedType, status, file_type, maxRowNum)
 
 	var mediaResults []struct {
 		ID        uint
@@ -379,21 +406,52 @@ func (s *ProductUpdateSerializer) IsValid(c *fiber.Ctx) *responses.ErrorResponse
 
 		// Kiểm tra nếu tổng số category sau khi cập nhật < 1
 		newCategoryCount := len(categoryIDs) + len(s.Categories) - len(s.CategoriesRemove)
-		fmt.Println("newCategoryCount: ", newCategoryCount)
 		if newCategoryCount < 1 {
 			return responses.NewErrorResponse(fiber.StatusBadRequest, "A product must have at least one category")
 		}
 	}
 
 	// Custom validation: Kiểm tra danh sách media remove
+
+	form, err := c.MultipartForm()
+	if err != nil {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Cannot parse form")
+	}
+	files := form.File["files"]
+
+	// Kiểm tra chỉ có ít hơn 1 file có phần mở rộng .zip hoặc .rar
+	archiveCount := 0
+	for _, file := range files {
+		ext := strings.ToLower(filepath.Ext(file.Filename))
+		if ext == ".zip" || ext == ".rar" {
+			archiveCount++
+		}
+	}
+
+	if archiveCount > 1 {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Only one .zip or .rar file is allowed")
+	}
+
+	// kiểm tra xem thử là có một file_type = 'download_file' bị xóa
+	var removeDownloadFileExists bool
+	if err := db.DB.Raw("SELECT EXISTS (SELECT 1 FROM media WHERE id IN ? AND related_id = ? AND related_type = 'products' AND status = ? AND file_type = 'download_file')",
+		s.FilesRemove, productID, models.MediaStatusUsing).Scan(&removeDownloadFileExists).Error; err != nil {
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Database error checking product ID: "+err.Error())
+	}
+
+	// Nếu có file .zip hoặc .rar được upload, thì bắt buộc phải có một file download_file bị xóa
+	// Ngược lại, nếu có một file download_file bị xóa, thì bắt buộc phải có một file .zip hoặc .rar được upload
+	if (archiveCount == 1 && !removeDownloadFileExists) || (archiveCount == 0 && removeDownloadFileExists) {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Product must have at least 1 download_file")
+	}
+
 	if len(s.FilesRemove) > 0 {
 		var mediaIDs []uint // Chứa danh sách ID của media đã liên kết với sản phẩm
 
-		// Truy vấn để lấy danh sách media ID liên kết với sản phẩm
-		err := db.DB.Model(&models.Product{}).
-			Joins("LEFT JOIN media ON media.related_id = products.id AND media.related_type = ?", "product").
-			Where("products.id = ?", productID).
-			Select("media.id").
+		// Truy vấn để lấy danh sách media ID status = 'using' liên kết với sản phẩm
+		err := db.DB.Model(&models.Media{}).
+			Where("related_id = ? AND status = ? AND related_type = 'products'", productID, models.MediaStatusUsing).
+			Select("id").
 			Find(&mediaIDs).Error
 
 		if err != nil {
@@ -461,5 +519,73 @@ func (s *ProductUpdateSerializer) Update(instance *models.Product) *responses.Er
 	services.BulkUpdateMedia(models.MediaStatusUpdated, s.FilesRemove)
 
 	// Trả về nil nếu thành công
+	return nil
+}
+
+// ProductQuerySerializer định nghĩa các tham số truy vấn để lọc và sắp xếp product
+type ProductQuerySerializer struct {
+	OrderID         string  `query:"order_id" json:"order_id,omitempty"`
+	UserID          string  `query:"user_id" json:"user_id,omitempty"`
+	RelatedType     string  `query:"related_type" json:"related_type,omitempty"`
+	PaymentMethod   string  `query:"payment_method" json:"payment_method,omitempty"`
+	PaymentStatus   string  `query:"payment_status" json:"payment_status,omitempty" default:"success"`
+	Page            int32   `query:"page" json:"page" default:"1"`
+	PageSize        int32   `query:"page_size" json:"page_size" default:"10"`
+	MaxPrice        float64 `query:"max_price" json:"max_price,omitempty"`
+	MinPrice        float64 `query:"min_price" json:"min_price,omitempty"`
+	EndPaymentDay   string  `query:"end_payment_day" json:"end_payment_day,omitempty"`     // YYYY-MM-DD
+	StartPaymentDay string  `query:"start_payment_day" json:"start_payment_day,omitempty"` // YYYY-MM-DD
+	PaymentDayOrder string  `query:"payment_day_order" json:"payment_day_order,omitempty"` // asc hoặc desc
+	PriceOrder      string  `query:"price_order" json:"price_order,omitempty"`             // asc hoặc desc
+}
+
+func (s *ProductQuerySerializer) IsValid(c *fiber.Ctx) *responses.ErrorResponse {
+	// Parse body to struct
+	if err := c.QueryParser(s); err != nil {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid pagination parameters: "+err.Error())
+	}
+	// Basic validation với go-playground/validator
+	validate := validator.New()
+	if err := validate.Struct(s); err != nil {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Validation failed: "+err.Error())
+	}
+	// validation cho order
+	if s.PaymentDayOrder != "" && s.PaymentDayOrder != "asc" && s.PaymentDayOrder != "desc" {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "payment_day_order must be 'asc' or 'desc'")
+	}
+	if s.PriceOrder != "" && s.PriceOrder != "asc" && s.PriceOrder != "desc" {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "price_order must be 'asc' or 'desc'")
+	}
+	// Validation tùy chỉnh cho ngày tháng
+	if s.StartPaymentDay != "" {
+		startTime, err := time.Parse("2006-01-02", s.StartPaymentDay)
+		if err != nil {
+			return responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid start_payment_day format: must be YYYY-MM-DD")
+		}
+		if s.EndPaymentDay != "" {
+			endTime, err := time.Parse("2006-01-02", s.EndPaymentDay)
+			if err != nil {
+				return responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid end_payment_day format: must be YYYY-MM-DD")
+			}
+			if startTime.After(endTime) {
+				return responses.NewErrorResponse(fiber.StatusBadRequest, "start_payment_day must not be after end_payment_day")
+			}
+		}
+	} else if s.EndPaymentDay != "" {
+		if _, err := time.Parse("2006-01-02", s.EndPaymentDay); err != nil {
+			return responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid end_payment_day format: must be YYYY-MM-DD")
+		}
+	}
+
+	// Validation tùy chỉnh cho MinPrice và MaxPrice
+	if s.MinPrice < 0 {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "min_price must be greater than 0")
+	}
+	if s.MaxPrice < 0 {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "max_price must be greater than 0")
+	}
+	if s.MinPrice > 0 && s.MaxPrice > 0 && s.MinPrice > s.MaxPrice {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "min_price must not be greater than max_price")
+	}
 	return nil
 }

@@ -101,7 +101,7 @@ func ConnectToApiGateway() {
 		StripPath: true,
 	}
 	fmt.Printf("Creating route: %s with path: %s\n", route.Name, route.Paths)
-	if err := postJSON(client, fmt.Sprintf("%s/services/auth-services/routes", kongAdminURL), route); err != nil {
+	if err := postJSON(client, fmt.Sprintf("%s/services/%s/routes", kongAdminURL, service.Name), route); err != nil {
 		fmt.Printf("Error creating route: %v\n", err)
 	} else {
 		fmt.Println("Route created successfully")

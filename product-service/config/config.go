@@ -10,17 +10,21 @@ import (
 
 var Config struct {
 	// Base config
-	BasePath        string
-	ServiceName     string
-	ServiceRoute    string
-	ServiceURL      string
-	ServicePath     string
-	APIKey          string
-	APIGatewayHost  string
-	AllowHost       string
-	HTTPPort        string
-	GRPCAuthPort    string
-	AuthServiceHost string
+	SystemStatus     string
+	BasePath         string
+	ServiceName      string
+	ServiceRoute     string
+	ServiceURL       string
+	ServicePath      string
+	APIKey           string
+	APIGatewayHost   string
+	AllowHost        string
+	HTTPPort         string
+	GRPCAuthPort     string
+	AuthServiceHost  string
+	GRPCPort         string
+	OrderServiceHost string
+	GRPCOrderPort    string
 
 	// Database config
 	DatabaseName     string
@@ -39,14 +43,20 @@ var Config struct {
 	SMTPHost     string
 
 	// Vstorage config
-	VstorageProjectID     string
-	VstorageAuthURL       string
-	VstorageBaseURL       string
-	VstorageContainerName string
-	VstorageClientSecret  string
-	VstorageClientID      string
-	VstorageSwiftUsername string
-	VstorageSwiftPassword string
+	VstorageProjectID                  string
+	VstorageAuthURL                    string
+	VstorageBaseURL                    string
+	VstorageContainerName              string
+	VstorageClientSecret               string
+	VstorageClientID                   string
+	VstorageSwiftUsername              string
+	VstorageSwiftPassword              string
+	VstorageURL                        string // url của domain thuê từ vstorage vd: hcm03.vstorage.vngcloud.vn
+	VstorageAccount                    string
+	VstorageDownloadContainer          string
+	VstorageDownloadDirectory          string
+	VstorageDownloadExpires            string
+	VstorageDownloadContainerSecretKey string
 
 	//Redis config
 	RedisIndex    string
@@ -66,16 +76,20 @@ func init() {
 		fmt.Println("Current working directory:", dir)
 	}
 	// Load từng file .env theo đúng mục đích
-	loadEnvFile(dir + "/env/.env")
-	loadEnvFile(dir + "/env/.env.database")
-	loadEnvFile(dir + "/env/.env.redis")
-	loadEnvFile(dir + "/env/.env.vstorage")
+	Config.SystemStatus = "docker"
+	loadEnvFile(dir + fmt.Sprintf("/env/%s/.env", Config.SystemStatus))
+	loadEnvFile(dir + fmt.Sprintf("/env/%s/.env.database", Config.SystemStatus))
+	loadEnvFile(dir + fmt.Sprintf("/env/%s/.env.redis", Config.SystemStatus))
+	loadEnvFile(dir + fmt.Sprintf("/env/%s/.env.vstorage", Config.SystemStatus))
 	// System setting
 	Config.BasePath = dir
 	Config.AllowHost = os.Getenv("ALLOW_HOST")
 	Config.HTTPPort = os.Getenv("HTTP_PORT")
+	Config.GRPCPort = os.Getenv("GRPC_PORT")
 	Config.GRPCAuthPort = os.Getenv("GRPC_AUTH_PORT")
 	Config.AuthServiceHost = os.Getenv("AUTH_SERVICE_HOST")
+	Config.GRPCOrderPort = os.Getenv("GRPC_ORDER_PORT")
+	Config.OrderServiceHost = os.Getenv("ORDER_SERVICE_HOST")
 	// Database setting
 	Config.DatabaseURL = os.Getenv("DATABASE_URL")
 	Config.DatabaseName = os.Getenv("DATABASE_NAME")
@@ -105,6 +119,13 @@ func init() {
 	Config.VstorageProjectID = os.Getenv("PROJECT_ID")
 	Config.VstorageSwiftPassword = os.Getenv("SWIFT_PASSWORD")
 	Config.VstorageSwiftUsername = os.Getenv("SWIFT_USERNAME")
+	Config.VstorageURL = os.Getenv("STORAGE_URL")
+	Config.VstorageAccount = os.Getenv("ACCOUNT_VSTORAGE")
+	Config.VstorageDownloadContainer = os.Getenv("DOWNLOAD_CONTAINER")
+	Config.VstorageDownloadDirectory = os.Getenv("DOWNLOAD_DIRECTORY")
+	Config.VstorageDownloadExpires = os.Getenv("DOWNLOAD_EXPIRES")
+	Config.VstorageDownloadContainerSecretKey = os.Getenv("DOWNLOAD_CONTAINER_SECRET_KEY")
+
 	// Redis setting
 	Config.RedisIndex = os.Getenv("REDIS_INDEX")
 	Config.RedisProtocol = os.Getenv("REDIS_PROTOCOL")

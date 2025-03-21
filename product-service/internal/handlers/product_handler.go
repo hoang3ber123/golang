@@ -4,10 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"product-service/internal/db"
+	grpcclient "product-service/internal/grpc_client"
 	"product-service/internal/models"
 	"product-service/internal/responses"
 	"product-service/internal/serializers"
 	"product-service/internal/services"
+	utils_system "product-service/internal/utils"
+
 	"product-service/pagination"
 	"strconv"
 	"strings"
@@ -63,11 +66,11 @@ func ProductCreate(c *fiber.Ctx) error {
 func ProductList(c *fiber.Ctx) error {
 	// Prepare search scope (optional)
 	titleQueries := c.Query("title")
-	priceMin := c.Query("price_min")          // Giá tối thiểu
-	priceMax := c.Query("price_max")          // Giá tối đa
-	createdAtMin := c.Query("created_at_min") // Format: "YYYY-MM-DD"
-	createdAtMax := c.Query("created_at_max") // Format: "YYYY-MM-DD"
-	categoryIDsQueries := c.Query("category_ids")
+	priceMin := c.Query("price_min")              // Giá tối thiểu
+	priceMax := c.Query("price_max")              // Giá tối đa
+	createdAtMin := c.Query("created_at_min")     // Format: "YYYY-MM-DD"
+	createdAtMax := c.Query("created_at_max")     // Format: "YYYY-MM-DD"
+	categoryIDsQueries := c.Query("category_ids") //Format: "id1,id2"
 	priceOrderQuery := c.Query("price_order")
 	createdAtOrderQuery := c.Query("created_at_order")
 	// Initializer query
@@ -172,10 +175,13 @@ func ProductList(c *fiber.Ctx) error {
 	if err != nil {
 		return err.Send(c)
 	}
-
+	var result interface{}
+	if products != nil {
+		result = serializers.ProductListResponse(&products)
+	}
 	return responses.NewSuccessResponse(fiber.StatusOK, fiber.Map{
 		"pagination": paginator,
-		"result":     serializers.ProductListResponse(&products),
+		"result":     result,
 	}).Send(c)
 }
 
@@ -266,4 +272,102 @@ func ProductDelete(c *fiber.Ctx) error {
 
 	//  Trả về response thành công
 	return responses.NewSuccessResponse(fiber.StatusOK, "Delete successfully").Send(c)
+}
+
+func ProductDownload(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Product ID is required").Send(c)
+	}
+	type ProductWithFile struct {
+		Product models.Product `gorm:"embedded"`
+		File    string         `gorm:"column:file"`
+	}
+	// Struct tạm để lưu kết quả
+	var result ProductWithFile
+
+	// Xử lý lỗi
+	if err := db.DB.Model(&models.Product{}).
+		Select("products.*, media.file").
+		Joins("LEFT JOIN media ON media.related_id = products.id AND media.related_type = ? AND media.status = 'using' AND media.file_type = 'download_file'", "products").
+		Where("products.id = ?", id).
+		First(&result).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return responses.NewErrorResponse(fiber.StatusNotFound, "Product not found").Send(c)
+		}
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Database error: "+err.Error()).Send(c)
+	}
+	fmt.Println("object:", result)
+	// Kiểm tra file_directory
+	if result.File == "" {
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Database error: file is empty").Send(c)
+	}
+
+	// Kiểm tra grpc xem khách hàng mua sản phẩm này chưa? (giữ nguyên logic của bạn)
+	// Check employee authenticated
+	user := c.Locals("user").(*models.User)
+	userID := user.ID.String()
+	relatedID := id
+	relatedType := "products"
+	err := grpcclient.CheckBoughtRequest(userID, relatedID, relatedType)
+	if err != nil {
+		return err.Send(c)
+	}
+	// Tạo link tải tạm
+	temp_url := utils_system.GenerateTempURL(result.File)
+
+	// Trả về response thành công
+	return responses.NewSuccessResponse(fiber.StatusOK, fiber.Map{
+		"download_link": temp_url,
+	}).Send(c)
+}
+
+func ProductFromOrder(c *fiber.Ctx) error {
+	serializer := new(serializers.ProductQuerySerializer)
+	//  Nếu có lỗi validation, return ngay lập tức
+	if err := serializer.IsValid(c); err != nil {
+		return err.Send(c)
+	}
+	// lấy user
+	user := c.Locals("user").(*models.User)
+
+	serializer.UserID = user.ID.String()
+	serializer.RelatedType = "products"
+
+	// Gọi gRPC để lấy danh sách product ID từ order service
+	productIDs, pagination, errResp := grpcclient.GetProductIDs(serializer)
+	if errResp != nil {
+		return c.Status(errResp.StatusCode).JSON(fiber.Map{"error": errResp.Message})
+	}
+
+	// Nếu không có product ID nào, trả về kết quả rỗng
+	if len(productIDs) == 0 {
+		return responses.NewSuccessResponse(fiber.StatusOK, fiber.Map{
+			"pagination": pagination,
+			"result":     []models.Product{},
+		}).Send(c)
+	}
+
+	// Truy vấn danh sách sản phẩm có ID nằm trong productIDs
+	var products []models.Product
+	if err := db.DB.Where("id IN (?)", productIDs).Find(&products).Error; err != nil {
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Database error: "+err.Error()).Send(c)
+	}
+
+	// Nếu không tìm thấy sản phẩm nào
+	if len(products) == 0 {
+		return responses.NewSuccessResponse(fiber.StatusOK, fiber.Map{
+			"pagination": pagination,
+			"result":     []models.Product{},
+		}).Send(c)
+	}
+
+	// Chuyển đổi danh sách sản phẩm thành response
+	result := serializers.ProductListResponse(&products)
+
+	// Trả về response thành công
+	return responses.NewSuccessResponse(fiber.StatusOK, fiber.Map{
+		"pagination": pagination,
+		"result":     result,
+	}).Send(c)
 }

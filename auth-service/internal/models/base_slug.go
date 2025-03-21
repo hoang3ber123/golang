@@ -1,9 +1,10 @@
 package models
 
 import (
+	"errors"
 	"fmt"
-	"regexp"
-	"strconv"
+	"reflect"
+	"time"
 
 	"github.com/gosimple/slug"
 	"gorm.io/gorm"
@@ -16,45 +17,47 @@ type BaseSlug struct {
 	Slug  string `gorm:"type:varchar(255);uniqueIndex;not null"`
 }
 
-// Hàm tạo slug duy nhất bằng cách sử dụng LIKE 'slug%'
-func (b *BaseSlug) generateUniqueSlug(db *gorm.DB) {
-	slug := slug.MakeLang(b.Title, "en")
-	uniqueSlug := slug
-	var existingSlugs []string
+// Interface để các model cụ thể implement
+type Slugable interface {
+	GetTableName() string
+}
 
-	// Tìm tất cả slug có dạng 'slug%'
-	db.Model(&BaseSlug{}).
-		Where("slug LIKE ?", slug+"%").
-		Pluck("slug", &existingSlugs)
+// Hàm tạo slug duy nhất
+func (b *BaseSlug) generateUniqueSlug(db *gorm.DB) error {
+	// Lấy model từ tx.Statement.Dest
+	dest := db.Statement.Dest
 
-	if len(existingSlugs) == 0 {
-		b.Slug = uniqueSlug
-		return
+	// Dùng reflection để xử lý double pointer
+	v := reflect.ValueOf(dest)
+	if v.Kind() == reflect.Ptr && v.Elem().Kind() == reflect.Ptr {
+		dest = v.Elem().Interface() // Giải tham chiếu
 	}
 
-	// Tìm số lớn nhất trong các slug có dạng 'slug-1', 'slug-2'
-	maxNumber := 0
-	slugPattern := regexp.MustCompile(`^` + regexp.QuoteMeta(slug) + `-(\d+)$`)
-
-	for _, existingSlug := range existingSlugs {
-		matches := slugPattern.FindStringSubmatch(existingSlug)
-		if len(matches) == 2 {
-			num, err := strconv.Atoi(matches[1])
-			if err == nil && num > maxNumber {
-				maxNumber = num
-			}
-		}
+	// Kiểm tra xem model có implement Slugable không
+	_, ok := dest.(Slugable)
+	if !ok {
+		return errors.New("model must implement Slugable interface")
 	}
 
-	// Gán slug mới với số lớn nhất + 1
-	b.Slug = fmt.Sprintf("%s-%d", slug, maxNumber+1)
+	// Tạo slug cơ bản từ title và timestamp
+	slugBase := slug.MakeLang(b.Title, "en")
+
+	// Lấy timestamp theo định dạng YYYYMMDDHHMMSSmmm
+	now := time.Now()
+	timestamp := fmt.Sprintf("%s%03d", now.Format("20060102-150405-"), now.Nanosecond()/1e6)
+	// Kết hợp slugBase với timestamp
+	b.Slug = fmt.Sprintf("%s-%s", slugBase, timestamp)
+
+	return nil
 }
 
 // Hook GORM: Trước khi tạo hoặc cập nhật
 func (b *BaseSlug) BeforeCreate(tx *gorm.DB) error {
 	b.BaseModel.BeforeCreate(tx)
 	// generate slug
-	b.generateUniqueSlug(tx)
+	if err := b.generateUniqueSlug(tx); err != nil {
+		return err
+	}
 	return nil
 }
 

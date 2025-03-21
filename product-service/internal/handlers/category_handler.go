@@ -67,6 +67,8 @@ func CategoryList(c *fiber.Ctx) error {
 	}
 	if parentIDQueries != "" {
 		query.Where("parent_id = ?", parentIDQueries)
+	} else {
+		query.Where("parent_id IS NULL", parentIDQueries)
 	}
 	// Sử dụng hàm phân trang
 	var Categories []models.Category
@@ -74,10 +76,13 @@ func CategoryList(c *fiber.Ctx) error {
 	if err != nil {
 		return err.Send(c)
 	}
-
+	var result interface{}
+	if Categories != nil {
+		result = serializers.CategoryListResponse(&Categories)
+	}
 	return responses.NewSuccessResponse(fiber.StatusOK, fiber.Map{
 		"pagination": paginator,
-		"result":     serializers.CategoryListResponse(&Categories),
+		"result":     result,
 	}).Send(c)
 }
 

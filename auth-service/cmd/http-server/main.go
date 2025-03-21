@@ -26,8 +26,10 @@ import (
 
 func init() {
 	db.InitDB()
-	initialize.InitializingDatabase()
-	initialize.ConnectToApiGateway()
+	if config.Config.SystemStatus == "docker" {
+		initialize.InitializingDatabase()
+		initialize.ConnectToApiGateway()
+	}
 }
 
 var grpcServer *grpc.Server // Biến toàn cục để quản lý gRPC server

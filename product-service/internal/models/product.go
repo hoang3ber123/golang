@@ -6,18 +6,19 @@ import (
 
 type Product struct {
 	BaseSlug
-	Description string     `gorm:"type:text"`
-	Link        *string    `gorm:"type:varchar(255)"` // Dùng pointer để hỗ trợ nullable
-	Categories  []Category `gorm:"many2many:product_categories;constraint:OnDelete:CASCADE"`
-	UserID      uuid.UUID  `gorm:"type:char(36);not null"` // Chỉ lưu user_id, không định nghĩa relation
-	Price       *float64   `gorm:"type:decimal(10,2)"`     // Dùng pointer để hỗ trợ nullable
+	Description  string     `gorm:"type:text"`
+	Link         *string    `gorm:"type:varchar(255)"` // Dùng pointer để hỗ trợ nullable
+	Categories   []Category `gorm:"many2many:product_categories;constraint:OnDelete:CASCADE"`
+	UserID       uuid.UUID  `gorm:"type:char(36);not null;index"` // Chỉ lưu user_id, không định nghĩa relation
+	Price        *float64   `gorm:"type:decimal(10,2)"`           // Dùng pointer để hỗ trợ nullable
+	DownloadLink string     `gorm:"type:varchar(255)"`
 }
 
 func (*Product) GetRelatedType() string {
-	return "product"
+	return "products"
 }
 func (*Product) GetDirectory() string {
-	return "product"
+	return "products"
 }
 func (*Product) GetTableName() string {
 	return "products"

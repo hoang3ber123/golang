@@ -83,10 +83,13 @@ func EmployeeList(c *fiber.Ctx) error {
 	if err != nil {
 		return err.Send(c)
 	}
-
+	var result interface{}
+	if employees != nil {
+		result = serializers.EmployeeListResponse(&employees)
+	}
 	return responses.NewSuccessResponse(fiber.StatusOK, fiber.Map{
 		"pagination": paginator,
-		"result":     serializers.EmployeeListResponse(&employees),
+		"result":     result,
 	}).Send(c)
 }
 

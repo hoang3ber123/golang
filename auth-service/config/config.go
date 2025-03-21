@@ -9,6 +9,7 @@ import (
 )
 
 var Config struct {
+	SystemStatus      string // dùng để setting: local, docker
 	BasePath          string
 	DatabaseName      string
 	DatabaseUsername  string
@@ -45,11 +46,13 @@ func init() {
 	} else {
 		fmt.Println("Current working directory:", dir)
 	}
+
 	// Load từng file .env theo đúng mục đích
-	loadEnvFile(dir + "/env/.env")
-	loadEnvFile(dir + "/env/.env.database")
-	loadEnvFile(dir + "/env/.env.redis")
-	loadEnvFile(dir + "/env/.env.vstorage")
+	Config.SystemStatus = "docker"
+	loadEnvFile(dir + fmt.Sprintf("/env/%s/.env", Config.SystemStatus))
+	loadEnvFile(dir + fmt.Sprintf("/env/%s/.env.database", Config.SystemStatus))
+	loadEnvFile(dir + fmt.Sprintf("/env/%s/.env.redis", Config.SystemStatus))
+	loadEnvFile(dir + fmt.Sprintf("/env/%s/.env.vstorage", Config.SystemStatus))
 	// System setting
 	Config.BasePath = dir
 	Config.AllowHost = os.Getenv("ALLOW_HOST")

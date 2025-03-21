@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"product-service/config"
@@ -10,6 +11,7 @@ import (
 	"product-service/internal/db"
 	grpcclient "product-service/internal/grpc_client"
 	"product-service/internal/routes"
+	protohandler "product-service/proto/proto_handler"
 
 	"syscall"
 	"time"
@@ -18,35 +20,58 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/encryptcookie"
+	product_proto "github.com/hoang3ber123/proto-golang/product"
+	"google.golang.org/grpc"
 )
 
 func init() {
 	db.InitDB()
-	grpcclient.InitGRPCClient()
-	initialize.ConnectToApiGateway()
+	// initialize.ConnectToApiGateway()
 	db.InitRedis()
+	if config.Config.SystemStatus == "docker" {
+		initialize.ConnectToApiGateway()
+	}
+	grpcclient.InitAuthGRPCClient()
+	grpcclient.InitOrderGRPCClient()
 }
 
-func main() {
+var grpcServer *grpc.Server // Biến toàn cục để quản lý gRPC server
+// Start gRPC Server
+func startGRPCServer() {
+	grpcPort := config.Config.GRPCPort
+	lis, err := net.Listen("tcp", ":"+grpcPort)
+	if err != nil {
+		log.Fatalf("Can't listen on port %s: %v", grpcPort, err)
+	}
 
+	grpcServer = grpc.NewServer()
+	product_proto.RegisterProductServiceServer(grpcServer, &protohandler.ProductServiceServer{})
+
+	log.Println("🚀 gRPC auth-service is running on port " + grpcPort)
+	if err := grpcServer.Serve(lis); err != nil {
+		log.Fatalf("Failed to run gRPC server: %v", err)
+	}
+}
+
+// Start Fiber Server
+func startFiberServer() *fiber.App {
 	app := fiber.New(fiber.Config{
 		JSONEncoder:  json.Marshal,
 		JSONDecoder:  json.Unmarshal,
-		IdleTimeout:  5 * time.Second, // Max time to wait for in-flight requests
+		IdleTimeout:  5 * time.Second,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 5 * time.Second,
 	})
 
-	// Middleware CORS
+	// Middleware
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     config.Config.AllowHost, // Chỉ định các domain được phép
+		AllowOrigins:     config.Config.AllowHost,
 		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
 		AllowHeaders:     "Content-Type, Authorization, api-key",
-		AllowCredentials: true,         // Cho phép gửi cookie
-		ExposeHeaders:    "Set-Cookie", // Để client đọc được cookie từ response
+		AllowCredentials: true,
+		ExposeHeaders:    "Set-Cookie",
 	}))
 
-	// Middleware Encrypt Cookie
 	app.Use(encryptcookie.New(encryptcookie.Config{
 		Key: config.Config.EncryptCookieKey,
 	}))
@@ -54,45 +79,69 @@ func main() {
 	// Setup routes
 	routes.SetupRoutes(app)
 
-	// Create a channel to listen for OS signals
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	// Start Fiber server in a goroutine
 	go func() {
 		if err := app.Listen(":" + config.Config.HTTPPort); err != nil {
-			log.Fatalf("Failed to start server: %v", err)
+			log.Fatalf("Failed to start Fiber server: %v", err)
 		}
 	}()
 
-	// Wait for shutdown signal
-	<-sigChan
-	log.Println("Shutdown signal received, initiating graceful shutdown...")
+	return app
+}
 
-	// Create a context with timeout for shutdown
+// Graceful Shutdown Function
+func shutdownServers(app *fiber.App) {
+	// Shutdown Fiber server
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Shutdown Fiber server
 	if err := app.ShutdownWithContext(ctx); err != nil {
-		log.Printf("Error during server shutdown: %v", err)
+		log.Printf("❌ Error during Fiber shutdown: %v", err)
+	} else {
+		log.Println("✅ Fiber server shut down successfully")
 	}
+
+	// Shutdown gRPC server
+	if grpcServer != nil {
+		grpcServer.GracefulStop()
+		log.Println("✅ gRPC server shut down successfully")
+	}
+
+	// Close connected to auth service
+	grpcclient.CloseAuthGRPCClient()
+	log.Println("gRPC auth client connection closed")
+	// Close connected to order service
+	grpcclient.CloseOrderGRPCClient()
+	log.Println("gRPC order client connection closed")
 
 	// Close database connection
 	sqlDB, err := db.DB.DB()
 	if err != nil {
-		log.Printf("Error accessing underlying SQL DB: %v", err)
+		log.Printf("❌ Error accessing SQL DB: %v", err)
 	} else {
 		if err := sqlDB.Close(); err != nil {
-			log.Printf("Error closing database: %v", err)
+			log.Printf("❌ Error closing database: %v", err)
 		} else {
-			log.Println("Database shut down successfully")
+			log.Println("✅ Database shut down successfully")
 		}
 	}
 
-	// Close grpc connection
-	grpcclient.CloseGRPCClient()
-	log.Println("gRPC client connection closed")
+	log.Println("✅ Server gracefully shut down")
+}
 
-	log.Println("Server gracefully shut down")
+func main() {
+	// Start gRPC server in a goroutine
+	go startGRPCServer()
+
+	// Start Fiber server
+	app := startFiberServer()
+
+	// Handle shutdown signals
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	<-sigChan
+	log.Println("🛑 Shutdown signal received, initiating graceful shutdown...")
+
+	// Shutdown all servers and database
+	shutdownServers(app)
 }
