@@ -3,6 +3,7 @@ package protohandler
 import (
 	"context"
 	"fmt"
+	"log"
 	"order-service/internal/db"
 	"order-service/internal/models"
 	"order-service/pagination"
@@ -12,6 +13,8 @@ import (
 	order_proto "github.com/hoang3ber123/proto-golang/order"
 	"github.com/stripe/stripe-go/v76"
 	"github.com/stripe/stripe-go/v76/checkout/session"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // OrderServiceServer triển khai interface từ proto
@@ -236,6 +239,41 @@ func (s *OrderServiceServer) GetProductIDs(ctx context.Context, req *order_proto
 			Total:     int32(pagination.Total),
 			TotalPage: int32(pagination.TotalPage),
 		},
+		StatusCode: fiber.StatusOK,
+		Error:      "",
+	}, nil
+}
+
+// GetProductIDs xử lý yêu cầu lấy danh sách product IDs
+func (s *OrderServiceServer) GetAllProductIDs(ctx context.Context, req *order_proto.GetAllProductIDsRequest) (*order_proto.GetAllProductIDsResponse, error) {
+	// Khởi tạo query cơ bản
+	query := db.DB.Model(&models.OrderDetail{}).
+		Joins("JOIN orders ON orders.id = order_details.order_id").
+		Where("orders.payment_status = 'success'").
+		Select("DISTINCT order_details.related_id")
+
+	// Xử lý các điều kiện lọc
+	if req.UserId != "" {
+		query = query.Where("orders.user_id = ?", req.UserId)
+	}
+	if req.RelatedType != "" {
+		query = query.Where("order_details.related_type = ?", req.RelatedType)
+	}
+
+	// Lấy danh sách product IDs
+	var productIDs []string
+	if err := query.Find(&productIDs).Error; err != nil {
+		log.Printf("Error fetching product IDs from database: %v", err)
+		return &order_proto.GetAllProductIDsResponse{
+			ProductIds: nil,
+			StatusCode: fiber.StatusInternalServerError,
+			Error:      "Database error: " + err.Error(),
+		}, status.Errorf(codes.Internal, "failed to fetch product IDs: %v", err)
+	}
+
+	// Trả về response
+	return &order_proto.GetAllProductIDsResponse{
+		ProductIds: productIDs,
 		StatusCode: fiber.StatusOK,
 		Error:      "",
 	}, nil

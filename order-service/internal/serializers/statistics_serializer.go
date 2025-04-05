@@ -4,7 +4,7 @@ import (
 	"order-service/internal/responses"
 	"time"
 
-	"github.com/go-playground/validator"
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 )
 

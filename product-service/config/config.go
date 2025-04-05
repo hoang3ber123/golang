@@ -10,21 +10,23 @@ import (
 
 var Config struct {
 	// Base config
-	SystemStatus     string
-	BasePath         string
-	ServiceName      string
-	ServiceRoute     string
-	ServiceURL       string
-	ServicePath      string
-	APIKey           string
-	APIGatewayHost   string
-	AllowHost        string
-	HTTPPort         string
-	GRPCAuthPort     string
-	AuthServiceHost  string
-	GRPCPort         string
-	OrderServiceHost string
-	GRPCOrderPort    string
+	SystemStatus         string
+	BasePath             string
+	ServiceName          string
+	ServiceRoute         string
+	ServiceURL           string
+	ServicePath          string
+	APIKey               string
+	APIGatewayHost       string
+	AllowHost            string
+	HTTPPort             string
+	GRPCAuthPort         string
+	AuthServiceHost      string
+	GRPCPort             string
+	OrderServiceHost     string
+	GRPCOrderPort        string
+	RecommendServiceHost string
+	GRPCRecommendPort    string
 
 	// Database config
 	DatabaseName     string
@@ -59,11 +61,12 @@ var Config struct {
 	VstorageDownloadContainerSecretKey string
 
 	//Redis config
-	RedisIndex    string
-	RedisProtocol string
-	RedisPassword string
-	RedisHost     string
-	RedisPort     string
+	RedisIndex         string
+	RedisProtocol      string
+	RedisPassword      string
+	RedisHost          string
+	RedisPort          string
+	RedisCategoriesKey string
 }
 
 // Load từng file .env theo đúng mục đích
@@ -77,10 +80,17 @@ func init() {
 	}
 	// Load từng file .env theo đúng mục đích
 	Config.SystemStatus = "docker"
-	loadEnvFile(dir + fmt.Sprintf("/env/%s/.env", Config.SystemStatus))
-	loadEnvFile(dir + fmt.Sprintf("/env/%s/.env.database", Config.SystemStatus))
-	loadEnvFile(dir + fmt.Sprintf("/env/%s/.env.redis", Config.SystemStatus))
-	loadEnvFile(dir + fmt.Sprintf("/env/%s/.env.vstorage", Config.SystemStatus))
+	if Config.SystemStatus == "docker" {
+		loadEnvFile(dir + "/env/docker/.env")
+		loadEnvFile(dir + "/env/docker/.env.database")
+		loadEnvFile(dir + "/env/docker/.env.redis")
+		loadEnvFile(dir + "/env/docker/.env.vstorage")
+	} else if Config.SystemStatus == "local" {
+		loadEnvFile(dir + "/env/local/.env")
+		loadEnvFile(dir + "/env/local/.env.database")
+		loadEnvFile(dir + "/env/local/.env.redis")
+		loadEnvFile(dir + "/env/local/.env.vstorage")
+	}
 	// System setting
 	Config.BasePath = dir
 	Config.AllowHost = os.Getenv("ALLOW_HOST")
@@ -90,6 +100,8 @@ func init() {
 	Config.AuthServiceHost = os.Getenv("AUTH_SERVICE_HOST")
 	Config.GRPCOrderPort = os.Getenv("GRPC_ORDER_PORT")
 	Config.OrderServiceHost = os.Getenv("ORDER_SERVICE_HOST")
+	Config.GRPCRecommendPort = os.Getenv("RECOMMEND_SERVICE_PORT")
+	Config.RecommendServiceHost = os.Getenv("RECOMMEND_SERVICE_HOST")
 	// Database setting
 	Config.DatabaseURL = os.Getenv("DATABASE_URL")
 	Config.DatabaseName = os.Getenv("DATABASE_NAME")
@@ -132,6 +144,8 @@ func init() {
 	Config.RedisPassword = os.Getenv("REDIS_PASSWORD")
 	Config.RedisHost = os.Getenv("REDIS_HOST")
 	Config.RedisPort = os.Getenv("REDIS_PORT")
+	// Key redis
+	Config.RedisCategoriesKey = "categories"
 }
 
 func loadEnvFile(filepath string) {

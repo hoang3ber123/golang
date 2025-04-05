@@ -1,0 +1,15 @@
+services:
+  recommend-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: recommend_service
+    ports:
+      - "50054:50054"
+    networks:
+      - kong-network
+    restart: unless-stopped
+
+networks:
+  kong-network:
+    external: true

@@ -36,7 +36,6 @@ func sanitizeFileName(fileName *multipart.FileHeader) {
 
 // Hàm tạo hàng loạt medias
 func BulkCreateMedia(files []*multipart.FileHeader, relatedID uuid.UUID, relatedType string, directory string) *responses.ErrorResponse {
-	fmt.Println("Xử lý ở BulkCreateMedia")
 	// Create slice medias
 	medias := make([]models.Media, len(files))
 
@@ -91,4 +90,38 @@ func BulkUpdateMedia(status string, mediaIDs []uint) error {
 	return db.DB.Model(&models.Media{}).
 		Where("id IN ?", mediaIDs).
 		Update("status", status).Error
+}
+
+// Hàm tạo hàng loạt medias
+func UploadMedia(file *multipart.FileHeader, directory string) (string, *responses.ErrorResponse) {
+
+	// Get XAuthToken
+	XAuthToken, err := internal_utils.AuthVstorage()
+	if err != nil {
+		return "", responses.NewErrorResponse(fiber.StatusInternalServerError, "Error authorizing vstorage: "+err.Error())
+	}
+
+	// Check extend in allowedExtensions
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	fileType, ok := allowedExtensions[ext]
+	if !ok {
+		return "", responses.NewErrorResponse(fiber.StatusBadRequest, "unsupported file extension: "+ext)
+	}
+
+	// Sanitize file name
+	sanitizeFileName(file)
+
+	// Adding timestamp to file name for unique file name
+	timestamp := time.Now().UnixMilli()
+	file.Filename = fmt.Sprintf("%s_%d%s", file.Filename, timestamp, ext)
+
+	// Push file
+	uploadPath := ""
+	if fileType != "download_file" {
+		_, uploadPath, _ = internal_utils.PushFileToVStorage(XAuthToken, file, directory)
+	} else {
+		return "", responses.NewErrorResponse(fiber.StatusBadRequest, "file must be image")
+
+	}
+	return uploadPath, nil // Lưu danh sách medias vào DB
 }

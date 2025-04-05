@@ -111,13 +111,14 @@ func Login(c *fiber.Ctx) error {
 }
 
 func Logout(c *fiber.Ctx) error {
+	fmt.Print("logout người dung")
 	cookie := new(fiber.Cookie)
 	cookie.Name = "Authorization"
 	cookie.Value = ""
 	cookie.Expires = time.Now().Add(-time.Hour) // Hết hạn ngay lập tức
 
 	c.Cookie(cookie)
-
+	fmt.Print("logout thành công")
 	return responses.NewSuccessResponse(fiber.StatusOK, "Sign out successfully").Send(c)
 }
 

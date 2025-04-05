@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"product-service/config"
+	"product-service/internal/models"
 	"product-service/internal/responses"
 	"product-service/internal/serializers"
 	"product-service/pagination"
@@ -99,6 +100,36 @@ func GetProductIDs(query *serializers.ProductQuerySerializer) ([]string, *pagina
 		Total:     int(res.Pagination.Total),
 		TotalPage: int(res.Pagination.TotalPage),
 	}, nil
+}
+
+// lấy danh sách product id đã mua
+func GetAllProductIDs(c *fiber.Ctx, relatedType string) ([]string, *responses.ErrorResponse) {
+	// Tạo context với timeout 3 giây
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	userInterface := c.Locals("user")
+	if userInterface == nil {
+		return nil, responses.NewErrorResponse(fiber.StatusInternalServerError, "Error when get user info")
+	}
+
+	user, ok := userInterface.(*models.User)
+	if !ok {
+		return nil, responses.NewErrorResponse(fiber.StatusInternalServerError, "Error when get user info")
+	}
+	// Gửi request đến order service
+	res, err := orderClient.GetAllProductIDs(ctx, &pb.GetAllProductIDsRequest{
+		UserId:      user.ID.String(),
+		RelatedType: relatedType,
+	})
+	if err != nil {
+		log.Printf("Error calling Order Service: %s", err.Error())
+		return nil, responses.NewErrorResponse(fiber.StatusInternalServerError, "Order service error: "+err.Error())
+	}
+
+	if res.Error != "" {
+		return nil, responses.NewErrorResponse(int(res.StatusCode), res.Error)
+	}
+	return res.ProductIds, nil
 }
 
 // Hàm đóng kết nối khi không cần nữa (nếu cần)

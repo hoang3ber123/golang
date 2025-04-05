@@ -64,6 +64,7 @@ func startFiberServer() *fiber.App {
 	})
 	// Stripe setting
 	stripe.Key = config.Config.StripeSecretKey
+
 	// Middleware
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     config.Config.AllowHost,

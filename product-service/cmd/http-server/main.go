@@ -31,8 +31,10 @@ func init() {
 	if config.Config.SystemStatus == "docker" {
 		initialize.ConnectToApiGateway()
 	}
+	// initialize.InitializingDatabase()
 	grpcclient.InitAuthGRPCClient()
 	grpcclient.InitOrderGRPCClient()
+	grpcclient.InitRecommendGRPCClient()
 }
 
 var grpcServer *grpc.Server // Biến toàn cục để quản lý gRPC server
@@ -112,6 +114,9 @@ func shutdownServers(app *fiber.App) {
 	// Close connected to order service
 	grpcclient.CloseOrderGRPCClient()
 	log.Println("gRPC order client connection closed")
+	// Close connected to order service
+	grpcclient.CloseRecommendGRPCClient()
+	log.Println("gRPC recommend client connection closed")
 
 	// Close database connection
 	sqlDB, err := db.DB.DB()

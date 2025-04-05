@@ -21,9 +21,9 @@ func SetupRoutes(app *fiber.App) {
 
 	// User group
 	userRoutes := api.Group("user")
+	userRoutes.Get("/", middleware.JWTAuthEmployeeMiddleware, middleware.RestrictRoleMiddlware("admin"), handlers.UserList)
 	userRoutes.Get("/detail", middleware.JWTAuthMiddleware, handlers.UserDetail)
-
-	// Admin group
+	// userRoutes.Get("/:id", middleware.JWTAuthEmployeeMiddleware, middleware.RestrictRoleMiddlware("admin"), handlers.UserAdminDetail)
 	employeeRoutes := api.Group("employee")
 	employeeRoutes.Use(middleware.JWTAuthEmployeeMiddleware) // Áp dụng việc đăng nhập cho tất cả api thuộc employee
 	employeeRoutes.Post("/", middleware.RestrictRoleMiddlware("admin"), handlers.EmployeeCreate)

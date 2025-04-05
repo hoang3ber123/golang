@@ -8,8 +8,8 @@ import (
 // Define base model with slug
 type BaseSlugUnique struct {
 	BaseModel
-	Title string `gorm:"not null;unique"`
-	Slug  string `gorm:"type:varchar(255);uniqueIndex;not null"`
+	Title string `gorm:"not null;unique" json:"title"`
+	Slug  string `gorm:"type:varchar(255);uniqueIndex;not null" json:"slug"`
 }
 
 // Hook GORM: Trước khi tạo hoặc cập nhật

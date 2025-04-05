@@ -10,6 +10,7 @@ import (
 	"product-service/internal/serializers"
 	"product-service/internal/services"
 	utils_system "product-service/internal/utils"
+	"sync"
 
 	"product-service/pagination"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	pb_order "github.com/hoang3ber123/proto-golang/recommend"
 	"gorm.io/gorm"
 )
 
@@ -140,10 +142,10 @@ func ProductList(c *fiber.Ctx) error {
 	}
 
 	// Tìm kiếm theo category_ids với Joins
+	var categoryIDs []string
 	if categoryIDsQueries != "" {
-		categoryIDs := strings.Split(categoryIDsQueries, ",")
+		categoryIDs = strings.Split(categoryIDsQueries, ",")
 		if len(categoryIDs) > 0 {
-			fmt.Println("validIDs:", categoryIDs) // Debug
 			query = query.Joins("LEFT JOIN product_categories ON product_categories.product_id = products.id").
 				Where("product_categories.category_id IN ?", categoryIDs) // Gán lại query
 		}
@@ -179,6 +181,12 @@ func ProductList(c *fiber.Ctx) error {
 	if products != nil {
 		result = serializers.ProductListResponse(&products)
 	}
+
+	// Lưu lại lịch sử tìm kiếm theo categories
+	if len(categoryIDs) > 0 {
+		go services.SaveSearchCategoryProduct(categoryIDs, c)
+	}
+
 	return responses.NewSuccessResponse(fiber.StatusOK, fiber.Map{
 		"pagination": paginator,
 		"result":     result,
@@ -255,6 +263,8 @@ func ProductDetail(c *fiber.Ctx) error {
 		return responses.NewErrorResponse(fiber.StatusInternalServerError, err.Error()).Send(c)
 	}
 	instance.Categories = categories
+	// Lưu lượt click
+	go services.SaveClickProduct(instance.ID, c)
 	return responses.NewSuccessResponse(fiber.StatusOK, serializers.ProductDetailResponse(&instance)).Send(c)
 }
 
@@ -322,6 +332,7 @@ func ProductDownload(c *fiber.Ctx) error {
 	}).Send(c)
 }
 
+// danh sách product đã mua
 func ProductFromOrder(c *fiber.Ctx) error {
 	serializer := new(serializers.ProductQuerySerializer)
 	//  Nếu có lỗi validation, return ngay lập tức
@@ -370,4 +381,106 @@ func ProductFromOrder(c *fiber.Ctx) error {
 		"pagination": pagination,
 		"result":     result,
 	}).Send(c)
+}
+
+// lấy danh sách product gợi ý
+func ProductRecommend(c *fiber.Ctx) error {
+	// sử dụng wait group gọi đồng thời các hàm
+	var wg sync.WaitGroup
+	var clickedProducts []services.ClickedProduct
+	var viewProducts []services.ProductSearchCount
+	var allProducts []services.ProductResponse
+	var boughtProducts []string
+	var errClickedProducts, errViewProducts, errGetAllProductInDB error
+	var errBoughtProducts *responses.ErrorResponse
+	// số lượng gorountine trong group
+	wg.Add(4)
+	// lấy danh sách lịch sử xem sản phẩm
+	go func() {
+		// đảm bảo rời thoát group khi thực hiện xong
+		defer wg.Done()
+		clickedProducts, errClickedProducts = services.GetClickedProductIDs(c)
+	}()
+	// lấy danh sách lịch sử tìm kiếm sản phẩm
+	go func() {
+		defer wg.Done()
+		viewProducts, errViewProducts = services.GetProductSearchCounts(c)
+	}()
+	// lấy danh sách product đã mua
+	go func() {
+		defer wg.Done()
+		boughtProducts, errBoughtProducts = grpcclient.GetAllProductIDs(c, "products")
+	}()
+	// Lấy tất cả product trong csdl
+	go func() {
+		defer wg.Done()
+		allProducts, errGetAllProductInDB = services.GetAllProductInDatabase()
+	}()
+	// đợi các hàm thực hiện xong
+	wg.Wait()
+
+	if errViewProducts != nil {
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "error when errViewProducts:"+errViewProducts.Error()).Send(c)
+	}
+	if errClickedProducts != nil {
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "error when errClickedProducts: "+errClickedProducts.Error()).Send(c)
+	}
+	if errGetAllProductInDB != nil {
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "error when errGetAllProductInDB: "+errGetAllProductInDB.Error()).Send(c)
+	}
+	if errBoughtProducts != nil {
+		return errBoughtProducts.Send(c)
+	}
+	// duyệt mảng maping dữ liệu
+	clickDetails := make([]*pb_order.ClickDetail, len(clickedProducts))
+	for i, cp := range clickedProducts {
+		clickDetails[i] = &pb_order.ClickDetail{
+			ProductId: cp.ProductID,
+			ClickTime: int32(cp.ClickTime), // Chuyển đổi kiểu dữ liệu nếu cần
+		}
+	}
+	viewProductDetails := make([]*pb_order.ViewProduct, len(viewProducts))
+	for i, vp := range viewProducts {
+		viewProductDetails[i] = &pb_order.ViewProduct{
+			ProductId: vp.ProductID.String(), // Chuyển đổi UUID thành string
+			ViewTime:  int32(vp.ViewTime),    // Chuyển đổi kiểu dữ liệu nếu cần
+		}
+	}
+	// Chuyển Categories từ string sang []string
+	allProductProto := make([]*pb_order.ProductRecommend, len(allProducts))
+	for i, p := range allProducts {
+		allProductProto[i] = &pb_order.ProductRecommend{}
+		allProductProto[i].Id = p.ID
+		allProductProto[i].Title = p.Title
+		allProductProto[i].CreatedAt = p.CreatedAt.Format("2006-01-06")
+		allProductProto[i].Pricing = p.Price
+
+		if p.Categories != "" {
+			allProductProto[i].Categories = strings.Split(p.Categories, ",")
+		} else {
+			allProductProto[i].Categories = []string{}
+		}
+	}
+	// Gọi hàm GetRecommendProductIDs để lấy danh sách sản phẩm gợi ý
+	recommendProductIDs, err := grpcclient.GetRecommendProductIDs(allProductProto, clickDetails, viewProductDetails, boughtProducts)
+	if err != nil {
+		return err.Send(c)
+	}
+
+	// lấy danh sách product
+	var recommendProduct []models.Product
+	if len(recommendProductIDs) > 0 {
+		if err := db.DB.Model(models.Product{}).
+			Where("id IN ?", recommendProductIDs).
+			Find(&recommendProduct).Error; err != nil {
+			return responses.NewErrorResponse(fiber.StatusInternalServerError, err.Error()).Send(c)
+		}
+	}
+	// serializer mảng trả về
+	var result interface{}
+	if recommendProduct != nil {
+		result = serializers.ProductListResponse(&recommendProduct)
+	}
+	//  Trả về response thành công
+	return responses.NewSuccessResponse(fiber.StatusOK, result).Send(c)
 }

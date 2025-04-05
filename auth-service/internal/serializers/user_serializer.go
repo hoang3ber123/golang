@@ -32,3 +32,32 @@ func UserDetailResponse(user *models.User) *UserDetailResponseSerializer {
 		Contact:     user.Contact,
 	}
 }
+
+// UserListResponseSerializer struct để serialize danh sách Role
+type UserListResponseSerializer struct {
+	BaseResponseSerializer
+	Username string `json:"username"`
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+}
+
+// UserListResponseSerializer serialize danh sách Role thành slice UserListResponseSerializer
+func UserListResponse(instance *[]models.User) []UserListResponseSerializer {
+	results := make([]UserListResponseSerializer, len(*instance)) // Preallocate slice
+
+	for i, val := range *instance {
+		// Copy từng phần tử từ models.Role vào serializer
+		results[i] = UserListResponseSerializer{
+			BaseResponseSerializer: BaseResponseSerializer{
+				ID:        val.ID,
+				CreatedAt: val.CreatedAt,
+				UpdatedAt: val.UpdatedAt,
+			},
+			Username: val.Username,
+			Name:     val.Name,
+			Email:    val.Email,
+		}
+	}
+
+	return results
+}

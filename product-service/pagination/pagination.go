@@ -65,3 +65,42 @@ func PaginateWithGORM[T any](c *fiber.Ctx, query *gorm.DB, modelDest *[]T) (*Pag
 	// Return pagination info
 	return p, nil
 }
+
+// PaginationWithSlice handles pagination for slice data
+func PaginationWithSlice[T any](c *fiber.Ctx, data []T) ([]T, *Pagination, *responses.ErrorResponse) {
+	// Parse pagination params
+	p := &Pagination{}
+	if err := c.QueryParser(p); err != nil {
+		return nil, nil, responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid pagination parameters: "+err.Error())
+	}
+
+	// Set bounds
+	if p.Page < 1 {
+		p.Page = 1
+	}
+	if p.PageSize < 1 || p.PageSize > 100 {
+		p.PageSize = 10
+	}
+
+	total := len(data)
+	p.Total = total
+	p.TotalPage = (p.Total + p.PageSize - 1) / p.PageSize
+
+	// If no data or page out of range, return empty
+	if total == 0 || p.Page > p.TotalPage {
+		return []T{}, p, nil
+	}
+
+	// Slice data
+	start := (p.Page - 1) * p.PageSize
+	end := start + p.PageSize
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+
+	paged := data[start:end]
+	return paged, p, nil
+}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"auth-service/initialize"
 	"auth-service/internal/db"
 	protohandler "auth-service/proto/proto_handler"
 	"log"
@@ -12,7 +13,7 @@ import (
 
 func init() {
 	db.InitDB()
-	// initialize.InitializingDatabase()
+	initialize.InitializingDatabase()
 	// initialize.ConnectToApiGateway()
 }
 

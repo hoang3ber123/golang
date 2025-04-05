@@ -5,7 +5,7 @@ import (
 	"auth-service/internal/models"
 	"auth-service/internal/responses"
 
-	"github.com/go-playground/validator"
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/jinzhu/copier"

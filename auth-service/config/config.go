@@ -48,11 +48,19 @@ func init() {
 	}
 
 	// Load từng file .env theo đúng mục đích
+	// Load từng file .env theo đúng mục đích
 	Config.SystemStatus = "docker"
-	loadEnvFile(dir + fmt.Sprintf("/env/%s/.env", Config.SystemStatus))
-	loadEnvFile(dir + fmt.Sprintf("/env/%s/.env.database", Config.SystemStatus))
-	loadEnvFile(dir + fmt.Sprintf("/env/%s/.env.redis", Config.SystemStatus))
-	loadEnvFile(dir + fmt.Sprintf("/env/%s/.env.vstorage", Config.SystemStatus))
+	if Config.SystemStatus == "docker" {
+		loadEnvFile(dir + "/env/docker/.env")
+		loadEnvFile(dir + "/env/docker/.env.database")
+		loadEnvFile(dir + "/env/docker/.env.redis")
+		loadEnvFile(dir + "/env/docker/.env.vstorage")
+	} else if Config.SystemStatus == "local" {
+		loadEnvFile(dir + "/env/local/.env")
+		loadEnvFile(dir + "/env/local/.env.database")
+		loadEnvFile(dir + "/env/local/.env.redis")
+		loadEnvFile(dir + "/env/local/.env.vstorage")
+	}
 	// System setting
 	Config.BasePath = dir
 	Config.AllowHost = os.Getenv("ALLOW_HOST")

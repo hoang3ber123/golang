@@ -19,7 +19,7 @@ type Media struct {
 	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
 	File        string    `gorm:"type:varchar(255);not null"`
 	FileType    string    `gorm:"type:varchar(20);not null"`
-	RelatedID   uuid.UUID `gorm:"type:char(36);not null;index:idx_related"`    // Chỉ lưu user_id, không định nghĩa relation
-	RelatedType string    `gorm:"type:varchar(50);not null;index:idx_related"` // Chỉ lưu user_id, không định nghĩa relation
+	RelatedID   uuid.UUID `gorm:"type:char(36);not null;uniqueIndex:idx_related"`
+	RelatedType string    `gorm:"type:varchar(50);not null;uniqueIndex:idx_related"`
 	Status      string    `gorm:"type:varchar(20);not null;default:'using'"`
 }

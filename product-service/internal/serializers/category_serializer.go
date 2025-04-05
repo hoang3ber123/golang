@@ -6,7 +6,7 @@ import (
 	"product-service/internal/models"
 	"product-service/internal/responses"
 
-	"github.com/go-playground/validator"
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/jinzhu/copier"
@@ -193,5 +193,25 @@ func (s *CategoryDeleteSerializer) Delete() *responses.ErrorResponse {
 	}
 
 	// Trả về nil nếu thành công
+	return nil
+}
+
+type CategoryRecommendSerializer struct {
+	Query string `json:"query" validate:"required"`
+}
+
+func (s *CategoryRecommendSerializer) IsValid(c *fiber.Ctx) *responses.ErrorResponse {
+	// Parse body to struct
+	if err := c.BodyParser(s); err != nil {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Invalid input: "+err.Error())
+	}
+
+	// Basic validation với go-playground/validator
+	validate := validator.New()
+	if err := validate.Struct(s); err != nil {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Validation failed: "+err.Error())
+	}
+
+	// Nếu không có lỗi, trả về nil
 	return nil
 }

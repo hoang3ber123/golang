@@ -9,6 +9,7 @@ var (
 		"success":    true,
 		"cancel":     true,
 		"processing": true,
+		"refunded":   true,
 	}
 )
 
@@ -19,5 +20,6 @@ type Order struct {
 	TransactionID string        `gorm:"type:varchar(255);not null;uniqueIndex:idx_unique_transaction_payment"`
 	AmountPaid    float64       `gorm:"type:float;not null"`
 	PaymentStatus string        `gorm:"type:varchar(20);not null;default:'processing';index"`
+	ChargeID      string        `gorm:"type:varchar(255);not null"`
 	OrderDetails  []OrderDetail `gorm:"foreignKey:OrderID;constraint:OnDelete:CASCADE"`
 }

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-playground/validator"
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -116,6 +116,11 @@ func (s *UserLoginSerializer) Login(c *fiber.Ctx) (*models.User, *responses.Erro
 	// Check password correctness
 	if !services.CheckPasswordHash(user.Password, s.Password) {
 		return nil, responses.NewErrorResponse(fiber.StatusBadRequest, "Password or Username is incorrect")
+	}
+
+	// Check password correctness
+	if !user.IsEmailVerify {
+		return nil, responses.NewErrorResponse(fiber.StatusBadRequest, "Please verify your email")
 	}
 
 	// No error

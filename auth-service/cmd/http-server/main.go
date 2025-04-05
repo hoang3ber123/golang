@@ -27,7 +27,6 @@ import (
 func init() {
 	db.InitDB()
 	if config.Config.SystemStatus == "docker" {
-		initialize.InitializingDatabase()
 		initialize.ConnectToApiGateway()
 	}
 }

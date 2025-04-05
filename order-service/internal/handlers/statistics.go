@@ -77,7 +77,6 @@ func GetOrderPaymentStatistic(c *fiber.Ctx) error {
 	// tạo mảng response
 	type ValuesResponse struct {
 		TimeUnit    string  `json:"time_unit"`
-		TotalOrder  float64 `json:"total_orders"`
 		TotalAmount float64 `json:"total_amount"`
 	}
 	countValuesInTimeUnit := services.CountTimeUnits(query.StartDay, query.EndDay, query.DayUnit)

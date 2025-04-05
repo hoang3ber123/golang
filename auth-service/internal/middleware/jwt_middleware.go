@@ -20,9 +20,7 @@ func JWTAuthMiddleware(c *fiber.Ctx) error {
 	secretKey := config.Config.JWTSecret
 	if secretKey == "" {
 		log.Println("Warning: JWT_SECRET is empty")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"message": "Server misconfiguration",
-		})
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Server misconfiguration").Send(c)
 	}
 	// sample token string taken from the New example
 	tokenString := c.Cookies("Authorization")
@@ -30,9 +28,7 @@ func JWTAuthMiddleware(c *fiber.Ctx) error {
 	// if don't have token in cookie
 	if tokenString == "" {
 		log.Println("Warning: tokenString is empty")
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"message": "Unauthorized",
-		})
+		return responses.NewErrorResponse(fiber.StatusUnauthorized, "Unauthorized").Send(c)
 	}
 
 	// Parse token
@@ -43,31 +39,23 @@ func JWTAuthMiddleware(c *fiber.Ctx) error {
 		return []byte(secretKey), nil
 	})
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"message": "Invalid token",
-		})
+		return responses.NewErrorResponse(fiber.StatusUnauthorized, "Invalid token").Send(c)
 	}
 
 	// Check token claims
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok || !token.Valid {
 		log.Println("Warning: claims is not valid")
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"message": "Unauthorized",
-		})
+		return responses.NewErrorResponse(fiber.StatusUnauthorized, "Unauthorized").Send(c)
 	}
 
 	// Check token expiration
 	exp, ok := claims["exp"].(float64)
 	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"message": "Token does not contain expiration",
-		})
+		return responses.NewErrorResponse(fiber.StatusUnauthorized, "Token does not contain expiration").Send(c)
 	}
 	if time.Now().Unix() > int64(exp) {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"message": "Token is expired",
-		})
+		return responses.NewErrorResponse(fiber.StatusUnauthorized, "Token is expired").Send(c)
 	}
 
 	// Find user
@@ -75,19 +63,13 @@ func JWTAuthMiddleware(c *fiber.Ctx) error {
 	db.DB.First(&user, "id = ?", claims["sub"])
 	if user.ID == uuid.Nil {
 		log.Printf("Warning: Can not find user %s", claims["sub"])
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"message": "Unauthorized",
-		})
+		return responses.NewErrorResponse(fiber.StatusUnauthorized, "Unauthorized").Send(c)
 	}
 	if !user.IsEmailVerify {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"message": "Please verify your email",
-		})
+		return responses.NewErrorResponse(fiber.StatusUnauthorized, "Please verify your email").Send(c)
 	}
 	if !user.IsActive {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"message": "Your account is blocked or unactived",
-		})
+		return responses.NewErrorResponse(fiber.StatusUnauthorized, "Your account is blocked or unactived").Send(c)
 	}
 
 	// Store user info in context for later use

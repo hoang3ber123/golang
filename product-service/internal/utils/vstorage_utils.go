@@ -48,13 +48,10 @@ type AuthRequest struct {
 
 // Authorize vstorage and save X-Auth-Token to Redis Cache for 1 hour
 func AuthVstorage() (string, error) {
-	fmt.Println("Xử lý ở AuthVstorage")
 	// Get XAuthToken from redis
-	fmt.Printf("Lấy redis")
 	xAuthToken, err := db.RedisDB.Get(db.Ctx, "XAuthToken").Result()
 	// If don't have key system will process an api to get an new XAuhtToken from vstorage and set it to redis
-	if err == redis.Nil {
-		fmt.Printf("Chưa lấy được token, tạo token mới")
+	if err == redis.Nil && xAuthToken == "" {
 		requestBody := AuthRequest{}
 		requestBody.Auth.Identity.Methods = []string{"password"}
 		requestBody.Auth.Identity.Password.User.Domain.Name = "default"
@@ -102,10 +99,8 @@ func AuthVstorage() (string, error) {
 		return token, nil
 		// If while getting XAuthToken error
 	} else if err != nil {
-		fmt.Printf("Lỗi khi lấy token")
 		return "", fmt.Errorf("error when retrieving data from Redis: %s", err)
 	}
-	fmt.Printf("Đã lấy được token")
 	return xAuthToken, nil
 }
 

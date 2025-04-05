@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-playground/validator"
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/jinzhu/copier"
@@ -484,13 +484,14 @@ func (s *ProductUpdateSerializer) IsValid(c *fiber.Ctx) *responses.ErrorResponse
 
 // Change validate data to instance
 func (s *ProductUpdateSerializer) Update(instance *models.Product) *responses.ErrorResponse {
-	// Sao chép dữ liệu từ serializer sang instance
-	if err := copier.Copy(instance, s); err != nil {
+	// Sao chép dữ liệu dạng PATCH
+	if err := copier.CopyWithOption(instance, s, copier.Option{IgnoreEmpty: true}); err != nil {
 		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Failed to copy data: "+err.Error())
 	}
 
 	// Lưu thay đổi vào database
-	if err := db.DB.Save(instance).Error; err != nil {
+	// dùng omit để loại bỏ 'layer magic tự tạo category của gorm' :))
+	if err := db.DB.Omit("Categories").Save(instance).Error; err != nil {
 		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Failed to update: "+err.Error())
 	}
 
