@@ -43,7 +43,7 @@ func InitRecommendGRPCClient() {
 
 // Hàm gọi gRPC để lấy danh sách category IDs dựa trên query và categories
 func GetRecommendCategoryIDs(query string) ([]string, *responses.ErrorResponse) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	// Tạo slice chứa con trỏ *pb.Category
 	var pbCategories []*pb.Category
@@ -85,7 +85,7 @@ func GetRecommendCategoryIDs(query string) ([]string, *responses.ErrorResponse) 
 
 // Hàm gọi gRPC để lấy danh sách category IDs dựa trên query và categories
 func GetRecommendProductIDs(recommendProduct []*pb.ProductRecommend, clickProducts []*pb.ClickDetail, viewProducts []*pb.ViewProduct, boughtProducts []string) ([]string, *responses.ErrorResponse) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// Tạo request cho GetRecommendCategoryIDs

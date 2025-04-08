@@ -49,7 +49,7 @@ func init() {
 
 	// Load từng file .env theo đúng mục đích
 	// Load từng file .env theo đúng mục đích
-	Config.SystemStatus = "docker"
+	Config.SystemStatus = "local"
 	if Config.SystemStatus == "docker" {
 		loadEnvFile(dir + "/env/docker/.env")
 		loadEnvFile(dir + "/env/docker/.env.database")
