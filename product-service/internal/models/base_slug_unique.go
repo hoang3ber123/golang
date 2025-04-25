@@ -9,7 +9,7 @@ import (
 type BaseSlugUnique struct {
 	BaseModel
 	Title string `gorm:"not null;unique" json:"title"`
-	Slug  string `gorm:"type:varchar(255);uniqueIndex;not null" json:"slug"`
+	Slug  string `gorm:"type:varchar(255);unique;not null" json:"slug"`
 }
 
 // Hook GORM: Trước khi tạo hoặc cập nhật

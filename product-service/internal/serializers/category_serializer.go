@@ -122,19 +122,25 @@ func (s *CategoryUpdateSerializer) Update(instance *models.Category) *responses.
 
 type CategoryDetailResponseSerializer struct {
 	BaseResponseSerializer
-	Title string `json:"title"`
-	Slug  string `json:"slug"`
+	Title    string `json:"title"`
+	Slug     string `json:"slug"`
+	ParentID string `json:"parent_id,omitempty"`
 }
 
 func CategoryDetailResponse(instance *models.Category) *CategoryDetailResponseSerializer {
+	var parent_id string
+	if instance.ParentID != nil {
+		parent_id = instance.ParentID.String()
+	}
 	return &CategoryDetailResponseSerializer{
 		BaseResponseSerializer: BaseResponseSerializer{
 			ID:        instance.ID,
 			CreatedAt: instance.CreatedAt,
 			UpdatedAt: instance.UpdatedAt,
 		},
-		Slug:  instance.Slug,
-		Title: instance.Title,
+		Slug:     instance.Slug,
+		Title:    instance.Title,
+		ParentID: parent_id,
 	}
 }
 

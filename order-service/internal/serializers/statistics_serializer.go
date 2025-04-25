@@ -102,3 +102,20 @@ func (s *StatisticsRankingQuerySerializer) IsValid(c *fiber.Ctx) *responses.Erro
 
 	return nil
 }
+
+type PaymentStatsResponse struct {
+	TotalAmountPaid      float64             `json:"total_amount_paid"`
+	NewAmountPaidInMonth float64             `json:"new_amount_paid_in_month"`
+	AmountPaidByMonth    []MonthlyAmountPaid `json:"amount_paid_by_month"`
+	AmountPaidByStatus   []StatusAmountPaid  `json:"amount_paid_by_status"`
+}
+
+type MonthlyAmountPaid struct {
+	Name   int     `json:"name"`
+	Amount float64 `json:"count"`
+}
+
+type StatusAmountPaid struct {
+	Status     string  `json:"name"`
+	Percentage float64 `json:"value"`
+}

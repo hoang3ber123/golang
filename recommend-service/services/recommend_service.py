@@ -58,3 +58,5 @@ def recommend_products(products_df, click_df, view_df, bought_df):
     recommended_products = products_df[~products_df['id'].isin(user_bought)]
     top_10 = recommended_products.sort_values('similarity', ascending=False).head(10)
     return top_10['id'].tolist()  # Trả về danh sách ID
+
+

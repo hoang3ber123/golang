@@ -140,3 +140,66 @@ def predict_categories(text, categories, threshold=0.60, rank=10):
     # Sắp xếp theo độ tương đồng và trả về top `rank` danh mục
     matched_categories.sort(key=lambda x: x[1], reverse=True)
     return [cat[0] for cat in matched_categories][:rank]
+# import tensorflow as tf
+# from transformers import BertTokenizer, TFBertModel
+
+# # Tải BERT tokenizer và model
+# tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+# model = TFBertModel.from_pretrained('bert-base-uncased')
+
+# def get_bert_embedding(texts):
+#     # Tokenize văn bản
+#     inputs = tokenizer(texts, return_tensors='tf', padding=True, truncation=True, max_length=512)
+#     # Lấy embedding từ BERT
+#     outputs = model(inputs)
+#     # Trả về pooler_output (embedding của token [CLS])
+#     return outputs.pooler_output
+
+# def cosine_similarity(a, b):
+#     """
+#     Tính độ tương đồng cosine giữa hai vector.
+    
+#     Args:
+#         a: TensorFlow tensor (vector)
+#         b: TensorFlow tensor (vector)
+    
+#     Returns:
+#         float: Độ tương đồng cosine
+#     """
+#     a = tf.squeeze(a)  # Loại bỏ chiều dư
+#     b = tf.squeeze(b)
+#     dot_product = tf.reduce_sum(tf.multiply(a, b))
+#     norm_a = tf.norm(a)
+#     norm_b = tf.norm(b)
+#     return dot_product / (norm_a * norm_b + 1e-10)  # Tránh chia cho 0
+
+# def predict_categories_bert(text, categories, threshold=0.6, rank=10):
+#     """
+#     Dự đoán danh mục dựa trên độ tương đồng ngữ nghĩa dùng BERT từ transformers.
+    
+#     Args:
+#         text (str): Văn bản đầu vào từ người dùng
+#         categories: Danh sách các đối tượng Category từ protobuf
+#         threshold (float): Ngưỡng độ tương đồng tối thiểu
+#         rank (int): Số lượng danh mục tối đa trả về
+    
+#     Returns:
+#         list: Danh sách các ID danh mục phù hợp
+#     """
+#     # Lấy embedding cho văn bản đầu vào
+#     input_embedding = get_bert_embedding([text.lower()])[0]
+#     matched_categories = []
+    
+#     for category in categories:
+#         # Kết hợp title và description
+#         category_text = f"{category.title} {category.description}".lower()
+#         # Lấy embedding cho danh mục
+#         category_embedding = get_bert_embedding([category_text])[0]
+#         # Tính độ tương đồng cosine
+#         similarity = cosine_similarity(input_embedding, category_embedding).numpy()
+#         if similarity >= threshold:
+#             matched_categories.append((category.id, similarity))
+    
+#     # Sắp xếp và trả về top rank danh mục
+#     matched_categories.sort(key=lambda x: x[1], reverse=True)
+#     return [cat[0] for cat in matched_categories][:rank]

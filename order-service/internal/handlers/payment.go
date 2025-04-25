@@ -13,6 +13,8 @@ import (
 	"order-service/internal/services"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+	proto_product "github.com/hoang3ber123/proto-golang/product"
 	"github.com/stripe/stripe-go/v76"
 	"github.com/stripe/stripe-go/v76/checkout/session"
 	"github.com/stripe/stripe-go/v76/paymentintent"
@@ -28,8 +30,16 @@ func PaymentCreate(c *fiber.Ctx) error {
 	if err := serializer.IsValid(c); err != nil {
 		return err.Send(c)
 	}
+	// duyệt mảng tạo proto gửi vào
+	productsInfoRequest := make([]*proto_product.ProductsInfoRequest, len(serializer.Cart))
+	for index, item := range serializer.Cart {
+		productsInfoRequest[index] = &proto_product.ProductsInfoRequest{
+			RelatedId:   item.RelatedID,
+			RelatedType: item.RelatedType,
+		}
+	}
 	// Gửi grpc để kiểm tra thử danh sách product
-	products, err := grpcclient.GetProductsInCartRequest(serializer)
+	products, err := grpcclient.GetProductsInfo(productsInfoRequest)
 	if err != nil {
 		return err.Send(c)
 	}
@@ -39,7 +49,7 @@ func PaymentCreate(c *fiber.Ctx) error {
 	if len(products) == 0 {
 		return responses.NewErrorResponse(fiber.StatusInternalServerError, "product is empty").Send(c)
 	}
-	fmt.Println("products:", products)
+
 	lineItems := make([]*stripe.CheckoutSessionLineItemParams, len(products))
 	var amountPaid float64
 	for prod_index, product := range products {
@@ -68,7 +78,7 @@ func PaymentCreate(c *fiber.Ctx) error {
 	// Chuyển đổi dữ liệu thành json để đưa vào metadata
 	userJsonData, _ := json.Marshal(user)
 	userStringData := string(userJsonData)
-	productsJsonData, _ := json.Marshal(products)
+	productsJsonData, _ := json.Marshal(productsInfoRequest)
 	productStringData := string(productsJsonData)
 	params := &stripe.CheckoutSessionParams{
 		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
@@ -78,8 +88,8 @@ func PaymentCreate(c *fiber.Ctx) error {
 			"products": productStringData,
 		},
 		Mode:       stripe.String("payment"),
-		SuccessURL: stripe.String("http://localhost:8082/v1/payment/success?session_id={CHECKOUT_SESSION_ID}"),
-		CancelURL:  stripe.String("http://localhost:8082/v1/payment/cancel?session_id={CHECKOUT_SESSION_ID}"),
+		SuccessURL: stripe.String("http://127.0.0.1:8082/v1/payment/success?session_id={CHECKOUT_SESSION_ID}"),
+		CancelURL:  stripe.String("http://127.0.0.1:8082/v1/payment/cancel?session_id={CHECKOUT_SESSION_ID}"),
 	}
 
 	s, errSesion := session.New(params)
@@ -89,7 +99,6 @@ func PaymentCreate(c *fiber.Ctx) error {
 	// Lưu lại order
 	services.CreateOrder(user.ID.String(), products, "stripe", s.ID, amountPaid)
 	// Trả về url front end
-	fmt.Println("URL checkout:", s.URL)
 	return responses.NewSuccessResponse(fiber.StatusOK, fiber.Map{
 		"payment_link": s.URL,
 	}).Send(c)
@@ -149,61 +158,65 @@ func PaymentSuccess(c *fiber.Ctx) error {
 
 	// đổi dữ liệu user và products trong metadata thành struct rồi gửi mail
 	var user models.User
-	var products []models.Product
+	var productsInfoRequest []*proto_product.ProductsInfoRequest
 	json.Unmarshal([]byte(s.Metadata["user"]), &user)
-	json.Unmarshal([]byte(s.Metadata["products"]), &products)
-	// gọi hàm gửi mail thông báo payment trả thành công
-	fmt.Println("order sau khi lưu:", order)
-	go email.SendPaymentCheckout(user, products, order)
+	json.Unmarshal([]byte(s.Metadata["products"]), &productsInfoRequest)
+	// lọc mảng id từ productsInfoRequest
+	productIDS := make([]string, len(productsInfoRequest))
+	for index, item := range productsInfoRequest {
+		productIDS[index] = item.RelatedId
+	}
+	// Xóa product khỏi cart
+	go grpcclient.ClearCartAfterCheckout(productsInfoRequest, user.ID.String()) // gọi hàm gửi mail thông báo payment trả thành công
+	go email.SendPaymentCheckout(user, productIDS, order)
 	// trả về dashboard của front end
-	return c.Redirect("http://localhost:3000/dashboard", fiber.StatusSeeOther)
+	return c.Redirect("http://127.0.0.1:3000/customer/orders", fiber.StatusSeeOther)
 }
 
 func PaymentCancel(c *fiber.Ctx) error {
 	sessionID := c.Query("session_id")
 	if sessionID == "" {
-		return responses.NewErrorResponse(fiber.StatusInternalServerError, "session is required").Send(c)
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "Session ID is required").Send(c)
 	}
+
 	// Thêm tham số Expand để lấy đầy đủ thông tin PaymentIntent
 	expand := "payment_intent"
 	params := &stripe.CheckoutSessionParams{
 		Params: stripe.Params{
-			Expand: []*string{&expand}, // Expand PaymentIntent
+			Expand: []*string{&expand},
 		},
 	}
-	// Lấy thông tin hóa đơn thanh toán
+
+	// Lấy thông tin phiên Checkout
 	s, err := session.Get(sessionID, params)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Failed to retrieve session: "+err.Error()).Send(c)
 	}
-	// Kiểm tra trạng thái thông tin hóa đơn để cập nhật
+
 	// Tìm đơn hàng theo TransactionID
 	var order models.Order
 	if err := db.DB.Where("transaction_id = ?", sessionID).First(&order).Error; err != nil {
-		log.Println("can't not find order:", err)
+		log.Printf("Cannot find order with transaction_id %s: %v", sessionID, err)
 	}
 
-	// Nếu thanh toán thành công, cập nhật trạng thái
-	if s.PaymentIntent.Status == "cancel" {
-		if err := db.DB.Model(&order).
-			Where("transaction_id = ?", sessionID).
-			Update("payment_status", "cancel").Error; err != nil {
-			log.Println("Error when update payment_status:", err)
-		} else {
-			log.Println("update successfully!")
+	// Kiểm tra trạng thái phiên Checkout
+	if s.Status == "open" || s.PaymentIntent == nil || (s.PaymentIntent != nil && s.PaymentIntent.Status != "succeeded") {
+		// Khách hàng đã hủy hoặc thanh toán chưa hoàn tất
+		if order.ID != uuid.Nil { // Chỉ cập nhật nếu đơn hàng tồn tại
+			if err := db.DB.Model(&models.Order{}).
+				Where("transaction_id = ?", sessionID).
+				Updates(map[string]interface{}{
+					"payment_status": "cancel", // Trạng thái hủy
+				}).Error; err != nil {
+				log.Printf("Error updating payment_status for order %s: %v", sessionID, err)
+			} else {
+				log.Printf("Payment status updated to 'canceled' for order %s", sessionID)
+			}
 		}
 	}
-	// Lấy thông tin
-	response := map[string]interface{}{
-		"payment_intent_id": s.PaymentIntent.ID,
-		"amount":            s.PaymentIntent.Amount,
-		"currency":          s.PaymentIntent.Currency,
-		"status":            s.PaymentIntent.Status,
-		"metadata":          s.Metadata,
-	}
-	fmt.Println("responsedataa:", response)
-	// trả về dashboard của front end
-	return c.Redirect("http://localhost:3000/dashboard", fiber.StatusSeeOther)
+
+	// Chuyển hướng về dashboard của frontend
+	return c.Redirect("http://127.0.0.1:3000/customer/orders", fiber.StatusSeeOther)
 }
 
 // PaymentRefund xử lý yêu cầu hoàn tiền cho một giao dịch

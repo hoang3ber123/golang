@@ -19,7 +19,7 @@ type Media struct {
 	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
 	File        string    `gorm:"type:varchar(255);not null"`
 	FileType    string    `gorm:"type:varchar(20);not null"`
-	RelatedID   uuid.UUID `gorm:"type:char(36);not null;uniqueIndex:idx_related"`
-	RelatedType string    `gorm:"type:varchar(50);not null;uniqueIndex:idx_related"`
+	RelatedID   uuid.UUID `gorm:"type:char(36);not null;"`
+	RelatedType string    `gorm:"type:varchar(50);not null;"`
 	Status      string    `gorm:"type:varchar(20);not null;default:'using'"`
 }

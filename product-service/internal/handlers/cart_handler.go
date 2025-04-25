@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"product-service/internal/db"
+	grpcclient "product-service/internal/grpc_client"
 	"product-service/internal/models"
 	"product-service/internal/responses"
 	"product-service/internal/serializers"
@@ -16,10 +17,8 @@ func CartProductAdd(c *fiber.Ctx) error {
 		return err.Send(c)
 	}
 
-	// Lấy user từ context (giả định đã có middleware auth)
-	user := c.Locals("user").(*models.User)
-
 	// Tìm hoặc tạo giỏ hàng
+	user := c.Locals("user").(*models.User)
 	var cart models.Cart
 	if err := db.DB.Where("user_id = ?", user.ID).FirstOrCreate(&cart, models.Cart{UserID: user.ID}).Error; err != nil {
 		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Failed to get or create cart"+err.Error()).Send(c)
@@ -32,6 +31,16 @@ func CartProductAdd(c *fiber.Ctx) error {
 	}
 	if !productExists {
 		return responses.NewErrorResponse(fiber.StatusNotFound, "Product does not exist").Send(c)
+	}
+
+	// kiểm tra xem đã mua sản phẩm chưa ?
+	isBought, err := grpcclient.CheckBoughtRequest(user.ID.String(), serializer.ID.String(), "products")
+	if err != nil {
+		return err.Send(c)
+	}
+	// Nếu đã tải
+	if isBought {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "You've already bought this product.").Send(c)
 	}
 
 	// Kiểm tra xem product đã có trong giỏ hàng chưa

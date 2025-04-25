@@ -8,7 +8,7 @@ require (
 	github.com/gofiber/fiber/v2 v2.52.6
 	github.com/google/uuid v1.6.0
 	github.com/gosimple/slug v1.15.0
-	github.com/hoang3ber123/proto-golang v1.1.6
+	github.com/hoang3ber123/proto-golang v1.1.9
 	github.com/joho/godotenv v1.5.1
 	github.com/redis/go-redis/v9 v9.7.1
 	github.com/stripe/stripe-go/v76 v76.25.0

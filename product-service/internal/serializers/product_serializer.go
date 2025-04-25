@@ -161,6 +161,40 @@ func ProductDetailResponse(instance *models.Product) *ProductDetailResponseSeria
 	}
 }
 
+func ProductDetailEmployeeResponse(instance *models.Product) *ProductDetailResponseSerializer {
+	// Xử lý danh sách category
+	categories := CategoryListResponse(&instance.Categories)
+	// Xử lý danh sách media
+	var mediaList []models.Media
+	db.DB.Where("related_id = ? AND related_type = ? AND status = 'using'", instance.ID, instance.GetRelatedType()).Find(&mediaList)
+	medias := MediaListResponse(&mediaList)
+	// Xử lý trường nullable (Link, Price)
+	var link string
+	if instance.Link != nil {
+		link = *instance.Link
+	}
+
+	var price float64
+	if instance.Price != nil {
+		price = *instance.Price
+	}
+
+	return &ProductDetailResponseSerializer{
+		BaseResponseSerializer: BaseResponseSerializer{
+			ID:        instance.ID,
+			CreatedAt: instance.CreatedAt,
+			UpdatedAt: instance.UpdatedAt,
+		},
+		Slug:        instance.Slug,
+		Title:       instance.Title,
+		Description: instance.Description,
+		Link:        link,
+		Price:       price,
+		Categories:  categories,
+		Medias:      medias,
+	}
+}
+
 // ProductListResponseSerializer struct để serialize danh sách Product
 type ProductListResponseSerializer struct {
 	BaseSlugResponseSerializer
@@ -319,11 +353,6 @@ func (s *ProductDeleteSerializer) Delete() *responses.ErrorResponse {
 	// Kiểm tra lỗi
 	if result.Error != nil {
 		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Failed to update media status: "+result.Error.Error())
-	}
-
-	// Kiểm tra nếu không có bản ghi nào được cập nhật (tùy chọn)
-	if result.RowsAffected == 0 {
-		return responses.NewErrorResponse(fiber.StatusNotFound, "No media found to update")
 	}
 
 	// Trả về nil nếu thành công

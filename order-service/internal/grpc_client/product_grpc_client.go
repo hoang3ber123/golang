@@ -6,7 +6,6 @@ import (
 	"order-service/config"
 	"order-service/internal/models"
 	"order-service/internal/responses"
-	"order-service/internal/serializers"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -41,23 +40,14 @@ func InitProductGRPCClient() {
 	log.Println("Connected gRPC Server!")
 }
 
-func GetProductsInCartRequest(order *serializers.CreateOrderSerializer) ([]*models.Product, *responses.ErrorResponse) {
+func GetProductsInfo(productsInfoRequest []*pb.ProductsInfoRequest) ([]*models.Product, *responses.ErrorResponse) {
 	// Tạo context với timeout 3 giây
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	// Gửi request đến product service
 	// duyệt cart của người dùng gửi lên thành []*pb.CartItemRequest gửi lên product grpc server
-	reqCart := make([]*pb.CartItemRequest, len(order.Cart))
-	index := 0
-	for key, uuids := range order.Cart {
-		reqCart[index] = &pb.CartItemRequest{
-			Key:    key,
-			Values: uuids,
-		}
-		index++
-	}
-	res, err := productClient.GetProductsInCart(ctx, &pb.GetProductsInCartRequest{
-		Cart: reqCart,
+	res, err := productClient.GetProductsInfo(ctx, &pb.GetProductsInfoRequest{
+		Products: productsInfoRequest,
 	})
 
 	if err != nil {
@@ -75,6 +65,7 @@ func GetProductsInCartRequest(order *serializers.CreateOrderSerializer) ([]*mode
 	for index, product := range res.Products {
 		products[index] = &models.Product{
 			ID:          product.Id,
+			Slug:        product.Slug,
 			Title:       product.Title,
 			Image:       product.Image,
 			RelatedType: product.RelatedType,
@@ -82,6 +73,29 @@ func GetProductsInCartRequest(order *serializers.CreateOrderSerializer) ([]*mode
 		}
 	}
 	return products, nil
+}
+
+func ClearCartAfterCheckout(productsInfoRequest []*pb.ProductsInfoRequest, user_id string) *responses.ErrorResponse {
+	// Tạo context với timeout 3 giây
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	// Gửi request đến product service
+	res, err := productClient.ClearCartAfterCheckout(ctx, &pb.ClearCartAfterCheckoutRequest{
+		Products: productsInfoRequest,
+		User:     user_id,
+	})
+
+	if err != nil {
+		log.Printf("Error calling product service: %s", err.Error())
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Product service error: "+err.Error())
+	}
+
+	// Kiểm tra lỗi trả về từ gRPC response
+	if res.Error != "" {
+		return responses.NewErrorResponse(int(res.StatusCode), res.Error)
+	}
+
+	return nil
 }
 
 // Hàm đóng kết nối khi không cần nữa (nếu cần)

@@ -31,6 +31,7 @@ func CategoryCreate(c *fiber.Ctx) error {
 		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Failed to create category: "+err.Error()).Send(c)
 	}
 	// xóa categories trong cache khi tạo
+	fmt.Println("redis key:", config.Config.RedisCategoriesKey)
 	db.RedisDB.Del(db.Ctx, config.Config.RedisCategoriesKey)
 	// Response
 	return responses.NewSuccessResponse(fiber.StatusCreated, serializers.CategoryDetailResponse(Category)).Send(c)
@@ -74,10 +75,10 @@ func CategoryList(c *fiber.Ctx) error {
 
 	// Nếu Redis có dữ liệu, parse lại
 	var allCategories []models.Category
-	fmt.Println("json data:", categoriesJSON)
 	if err := json.Unmarshal([]byte(categoriesJSON), &allCategories); err != nil {
 		return responses.NewErrorResponse(fiber.StatusInternalServerError, "JSON unmarshal error: "+err.Error()).Send(c)
 	}
+
 	// Lọc dữ liệu theo query string
 	title := c.Query("title")
 	parentID := c.Query("parent_id")
@@ -87,18 +88,20 @@ func CategoryList(c *fiber.Ctx) error {
 		if title != "" && !strings.Contains(strings.ToLower(cat.Title), strings.ToLower(title)) {
 			continue
 		}
-		if parentID != "" {
-			if cat.ParentID == nil || cat.ParentID.String() != parentID {
+		switch {
+		case parentID == "":
+			// Không lọc gì
+		case parentID == "null":
+			if cat.ParentID != nil {
 				continue
 			}
-		} else {
-			if cat.ParentID != nil {
+		default:
+			if cat.ParentID == nil || cat.ParentID.String() != parentID {
 				continue
 			}
 		}
 		filtered = append(filtered, cat)
 	}
-
 	// Pagination
 	pageData, paginationInfo, errResp := pagination.PaginationWithSlice(c, filtered)
 	if errResp != nil {

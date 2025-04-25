@@ -48,6 +48,7 @@ var Config struct {
 	VstorageProjectID                  string
 	VstorageAuthURL                    string
 	VstorageBaseURL                    string
+	VstorageDownloadBaseURL            string
 	VstorageContainerName              string
 	VstorageClientSecret               string
 	VstorageClientID                   string
@@ -67,6 +68,9 @@ var Config struct {
 	RedisHost          string
 	RedisPort          string
 	RedisCategoriesKey string
+
+	//Open config
+	GeminiAPIKey string
 }
 
 // Load từng file .env theo đúng mục đích
@@ -85,11 +89,13 @@ func init() {
 		loadEnvFile(dir + "/env/docker/.env.database")
 		loadEnvFile(dir + "/env/docker/.env.redis")
 		loadEnvFile(dir + "/env/docker/.env.vstorage")
+		loadEnvFile(dir + "/env/docker/.env.openai")
 	} else if Config.SystemStatus == "local" {
 		loadEnvFile(dir + "/env/local/.env")
 		loadEnvFile(dir + "/env/local/.env.database")
 		loadEnvFile(dir + "/env/local/.env.redis")
 		loadEnvFile(dir + "/env/local/.env.vstorage")
+		loadEnvFile(dir + "/env/local/.env.openai")
 	}
 	// System setting
 	Config.BasePath = dir
@@ -125,6 +131,7 @@ func init() {
 	// Vstorage setting
 	Config.VstorageAuthURL = os.Getenv("AUTH_URL")
 	Config.VstorageBaseURL = os.Getenv("BASE_URL")
+	Config.VstorageDownloadBaseURL = os.Getenv("BASE_DOWNLOAD_URL")
 	Config.VstorageClientID = os.Getenv("CLIENT_ID")
 	Config.VstorageClientSecret = os.Getenv("CLIENT_SECRECT")
 	Config.VstorageContainerName = os.Getenv("CONTAINER_NAME")
@@ -144,8 +151,10 @@ func init() {
 	Config.RedisPassword = os.Getenv("REDIS_PASSWORD")
 	Config.RedisHost = os.Getenv("REDIS_HOST")
 	Config.RedisPort = os.Getenv("REDIS_PORT")
-	// Key redis
 	Config.RedisCategoriesKey = "categories"
+
+	// Open ai setting
+	Config.GeminiAPIKey = os.Getenv("GEMINI_API_KEY")
 }
 
 func loadEnvFile(filepath string) {

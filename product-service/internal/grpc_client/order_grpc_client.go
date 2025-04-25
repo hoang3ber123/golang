@@ -42,7 +42,7 @@ func InitOrderGRPCClient() {
 	log.Println("Connected gRPC Server!")
 }
 
-func CheckBoughtRequest(UserID, RelatedID, RelatedType string) *responses.ErrorResponse {
+func CheckBoughtRequest(UserID, RelatedID, RelatedType string) (bool, *responses.ErrorResponse) {
 	// Tạo context với timeout 3 giây
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -55,15 +55,10 @@ func CheckBoughtRequest(UserID, RelatedID, RelatedType string) *responses.ErrorR
 
 	if err != nil {
 		log.Printf("Error calling order service: %s", err.Error())
-		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Order service error: "+err.Error())
+		return false, responses.NewErrorResponse(fiber.StatusInternalServerError, "Order service error: "+err.Error())
 	}
 
-	// Kiểm tra lỗi trả về từ gRPC response
-	if res.Error != "" {
-		return responses.NewErrorResponse(int(res.StatusCode), res.Error)
-	}
-
-	return nil
+	return res.IsBought, nil
 }
 
 func GetProductIDs(query *serializers.ProductQuerySerializer) ([]string, *pagination.Pagination, *responses.ErrorResponse) {

@@ -9,31 +9,25 @@ import (
 
 func SetupRoutes(app *fiber.App) {
 	api := app.Group("/v1")
-	// Định nghĩa các api của employee
-	employeeGroup := api.Group("employee")
 	//Payment group
 	paymentRoutes := api.Group("payment")
 	paymentRoutes.Post("/checkout", middleware.AuthUserMiddleware, handlers.PaymentCreate)
 	paymentRoutes.Get("/success", handlers.PaymentSuccess)
 	paymentRoutes.Get("/cancel", handlers.PaymentCancel)
 	//Payment group employee
-	employeePaymentRoutes := employeeGroup.Group("payment")
-	employeePaymentRoutes.Post("/:id/refund", middleware.AuthEmployeeMiddleware("admin", "manager"), handlers.PaymentRefund)
+	paymentRoutes.Post("/:id/refund", middleware.AuthEmployeeMiddleware("admin", "manager"), handlers.PaymentRefund)
 
 	// order group
 	orderRoutes := api.Group("order")
 	orderRoutes.Get("/", middleware.AuthUserMiddleware, handlers.OrderList)
-	// order group employee
-	employeeOrderRoutes := employeeGroup.Group("order")
-	employeeOrderRoutes.Get("/", middleware.AuthUserMiddleware, handlers.OrderList)
+	orderRoutes.Get("/:id", middleware.AuthUserMiddleware, handlers.OrderDetail)
 	//Statistics group
-	// statisticsRoutes := api.Group("statistics")
-	// Statistics Employee group
-	EmployeeeStatisticsRoutes := employeeGroup.Group("statistics")
-	EmployeeeStatisticsRoutes.Get("/sales-amount", middleware.AuthEmployeeMiddleware("admin"), handlers.GetOrderPaymentStatistic)
-	EmployeeeStatisticsRoutes.Get("/sales-general", middleware.AuthEmployeeMiddleware("admin"), handlers.GetOrderGeneralStatistic)
-	EmployeeeStatisticsRoutes.Get("/ranking-product", middleware.AuthEmployeeMiddleware("admin"), handlers.GetOrderRankingProductStatistic)
-	// EmployeeeStatisticsRoutes.Get("/ranking-user", middleware.AuthEmployeeMiddleware("admin"), handlers.GetOrderPaymentStatistic)
-	// EmployeeeStatisticsRoutes.Get("/ranking-order", middleware.AuthEmployeeMiddleware("admin"), handlers.GetOrderPaymentStatistic)
+	statisticsRoutes := api.Group("statistics")
+	statisticsRoutes.Get("/order", middleware.AuthUserMiddleware, handlers.GetUserOrderStatistic)
+	statisticsRoutes.Get("/payment", middleware.AuthEmployeeMiddleware("admin"), handlers.PaymentStatistics)
 
+	// Statistics Employee group
+	statisticsRoutes.Get("/sales-amount", middleware.AuthEmployeeMiddleware("admin"), handlers.GetOrderPaymentStatistic)
+	// statisticsRoutes.Get("/sales-general", middleware.AuthEmployeeMiddleware("admin"), handlers.GetOrderGeneralStatistic)
+	// statisticsRoutes.Get("/ranking-product", middleware.AuthEmployeeMiddleware("admin"), handlers.GetOrderRankingProductStatistic)
 }

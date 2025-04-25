@@ -30,6 +30,10 @@ func SetupRoutes(app *fiber.App) {
 	employeeRoutes.Get("/", middleware.RestrictRoleMiddlware("admin"), handlers.EmployeeList)
 	employeeRoutes.Get("/detail", handlers.EmployeeDetail)
 
+	// statistic routes
+	statisticRoutes := api.Group("statistics")
+	statisticRoutes.Use(middleware.JWTAuthEmployeeMiddleware)
+	statisticRoutes.Get("/user", middleware.RestrictRoleMiddlware("admin"), handlers.UserStatistics)
 	// login
 	// logout
 	// decentralize

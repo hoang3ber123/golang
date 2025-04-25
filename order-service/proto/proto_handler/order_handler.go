@@ -98,19 +98,11 @@ func (s *OrderServiceServer) CheckBoughtProduct(ctx context.Context, req *order_
 			IsBought:   false,
 			StatusCode: fiber.StatusInternalServerError, // 500 - Lỗi server
 			Error:      "Database query failed",
-		}, nil
-	}
-
-	if !isBought {
-		return &order_proto.CheckBoughtProductResponse{
-			IsBought:   false,
-			StatusCode: fiber.StatusBadRequest, // 400 - Người dùng chưa mua
-			Error:      "Product not purchased",
-		}, nil
+		}, err
 	}
 
 	return &order_proto.CheckBoughtProductResponse{
-		IsBought:   true,
+		IsBought:   isBought,
 		StatusCode: fiber.StatusOK, // 200 - Thành công
 		Error:      "",
 	}, nil
@@ -171,7 +163,7 @@ func (s *OrderServiceServer) GetProductIDs(ctx context.Context, req *order_proto
 				Error:      "invalid start_payment_day format (use YYYY-MM-DD)",
 			}, nil
 		}
-		query = query.Where("orders.updated_date >= ?", startTime)
+		query = query.Where("orders.updated_at >= ?", startTime)
 	}
 
 	// Lọc theo end_payment_day
@@ -185,7 +177,7 @@ func (s *OrderServiceServer) GetProductIDs(ctx context.Context, req *order_proto
 				Error:      "invalid end_payment_day format (use YYYY-MM-DD)",
 			}, nil
 		}
-		query = query.Where("orders.updated_date <= ?", endTime)
+		query = query.Where("orders.updated_at <= ?", endTime)
 	}
 
 	// Lọc theo min_price

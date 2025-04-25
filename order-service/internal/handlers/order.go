@@ -33,6 +33,21 @@ func OrderList(c *fiber.Ctx) error {
 	}).Send(c)
 }
 
+func OrderDetail(c *fiber.Ctx) error {
+	// lấy user từ context
+	user := c.Locals("user").(*models.User)
+	id := c.Params("id")
+	// Sử dụng hàm phân trang
+	var instance models.Order
+	db.DB.Model(&models.Order{}).Where("user_id = ? AND id = ?", user.ID, id).Find(&instance)
+	// serializer
+	result, err := serializers.OrderDetailResponse(&instance)
+	if err != nil {
+		return err.Send(c)
+	}
+	return responses.NewSuccessResponse(fiber.StatusOK, result).Send(c)
+}
+
 // API: Thống kê tổng quát product,user,order theo payment status theo ngày tháng năm
 func OrderStatistic(c *fiber.Ctx) error {
 	query := serializers.StatisticsQuerySerializer{}
@@ -137,21 +152,3 @@ ORDER BY ps.payment_status DESC, time_unit ASC;
 	}
 	return responses.NewSuccessResponse(fiber.StatusOK, totalResponse).Send(c)
 }
-
-// func OrderInfo(c *fiber.Ctx) error {
-// 	id := c.Params("id")
-// 	if id == "" {
-// 		return responses.NewErrorResponse(fiber.StatusBadRequest, "ID is required").Send(c)
-// 	}
-
-// 	// Lấy order
-// 	var instance models.Order
-// 	if err := db.DB.Joins("OrderDetails").First(&instance, "id = ?", id).Error; err != nil {
-// 		if errors.Is(err, gorm.ErrRecordNotFound) {
-// 			return responses.NewErrorResponse(fiber.StatusNotFound, "Order not found").Send(c)
-// 		}
-// 		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Database error: "+err.Error()).Send(c)
-// 	}
-
-// 	return responses.NewSuccessResponse(fiber.StatusOK, serializers.OrderDetailResponse(&instance)).Send(c)
-// }

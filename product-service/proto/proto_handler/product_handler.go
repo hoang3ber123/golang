@@ -2,13 +2,12 @@ package protohandler
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"product-service/config"
 	"product-service/internal/db"
-	"strings"
+	"product-service/internal/models"
 
 	product_proto "github.com/hoang3ber123/proto-golang/product"
+	"gorm.io/gorm"
 )
 
 // ProductServiceServer triển khai interface từ proto
@@ -17,61 +16,100 @@ type ProductServiceServer struct {
 }
 
 // Xác thực token từ Product Service
-func (s *ProductServiceServer) GetProductsInCart(ctx context.Context, req *product_proto.GetProductsInCartRequest) (*product_proto.GetProductsInCartResponse, error) {
-	var response product_proto.GetProductsInCartResponse
-	allowRelatedType := map[string]bool{
-		"products": true,
-		"services": true,
-	}
-	// Kiểm tra có trong relatetype không
-	for _, item := range req.Cart {
-		if !allowRelatedType[item.Key] {
-			{
-				log.Println("Warning: Error allow realated type")
-				return &product_proto.GetProductsInCartResponse{
-					Products:   nil,
-					Error:      "Invalid related type: " + item.Key,
-					StatusCode: 400,
-				}, nil
-			}
+func (s *ProductServiceServer) GetProductsInfo(ctx context.Context, req *product_proto.GetProductsInfoRequest) (*product_proto.GetProductsInfoResponse, error) {
+	var response product_proto.GetProductsInfoResponse
+	var products []*product_proto.Product
+	// Tách dữ liệu ra các mảng id khác nhau dựa vào relatedType
+	var productIDs []string
+	for _, p := range req.Products {
+		if p.RelatedType == "products" {
+			productIDs = append(productIDs, p.RelatedId)
 		}
 	}
-	// Tạo danh sách câu truy vấn có thêm cột related_type
-	queries := make([]string, len(req.Cart))
-	for inx, item := range req.Cart {
-		// Nối các ID thành chuỗi '123', '1234', '1235'
-		idStr := "'" + strings.Join(item.Values, "', '") + "'"
-		queries[inx] = fmt.Sprintf(
-			"SELECT id, title, price, '%s' AS related_type FROM %s WHERE id IN (%s)",
-			item.Key, item.Key, idStr,
-		)
-	}
-	// Hợp nhất truy vấn bằng UNION ALL
-	finalQuery := strings.Join(queries, " UNION ALL ")
-	// Đổ product lấy từ các bảng vào một bảng tạm
-	cteQuery := `
-	WITH temp_products AS (
-		%s
-	),
-	ranked_media AS (
-		SELECT m.*, 
-		       ROW_NUMBER() OVER (PARTITION BY m.related_id, m.related_type ORDER BY m.created_at ASC) AS rnk
-		FROM media m
-		WHERE m.status = 'using' AND m.file_type = 'image'
-	)
-	SELECT tp.id as id, tp.title as title, CONCAT('%s', rm.file) as image, tp.related_type as related_type, tp.price as price
-	FROM temp_products tp
-	LEFT JOIN ranked_media rm 
-	    ON tp.id = rm.related_id AND tp.related_type = rm.related_type
-	WHERE rm.rnk = 1 OR rm.rnk IS NULL;
-`
+	baseUrl := config.Config.VstorageBaseURL + "/"
+	err := db.DB.Raw(`
+            SELECT 
+                p.id, 
+                p.title, 
+                p.slug, 
+                'products' as related_type, 
+                p.price,
+                (SELECT m.file 
+                 FROM media m 
+                 WHERE m.related_id = p.id 
+                 AND m.related_type = 'products' 
+                 AND m.file_type = 'image' 
+                 AND m.status = 'using' 
+                 ORDER BY m.created_at ASC 
+                 LIMIT 1) as image
+            FROM products p
+            WHERE p.id IN ?
+        `, productIDs).Scan(&products).Error
 
-	// Chạy truy vấn với GORM
-	baseURL := fmt.Sprintf("%s/", config.Config.VstorageBaseURL)
-	products := []*product_proto.Product{}
-	db.DB.Raw(fmt.Sprintf(cteQuery, finalQuery, baseURL)).Scan(&products)
+	if err != nil {
+		response.StatusCode = 500
+		response.Error = "Failed to query products: " + err.Error()
+		return &response, err
+	}
+	// duyệt mảng product thêm base url
+	for _, p := range products {
+		if p.Image != "" {
+			p.Image = baseUrl + p.Image
+		}
+	}
 	// Trả về response
 	response.Products = products
+	response.StatusCode = 200
+	response.Error = ""
+	return &response, nil
+}
+
+func (s *ProductServiceServer) ClearCartAfterCheckout(ctx context.Context, req *product_proto.ClearCartAfterCheckoutRequest) (*product_proto.ClearCartAfterCheckoutResponse, error) {
+	var response product_proto.ClearCartAfterCheckoutResponse
+	// Tách dữ liệu ra các mảng id khác nhau dựa vào relatedType
+	var productIDs []string
+	for _, p := range req.Products {
+		if p.RelatedType == "products" {
+			productIDs = append(productIDs, p.RelatedId)
+		}
+	}
+
+	// Nếu không có productIDs, vẫn trả về thành công
+	if len(productIDs) == 0 {
+		response.StatusCode = 200
+		response.Error = ""
+		return &response, nil
+	}
+
+	// Tìm Cart của user
+	var cart models.Cart
+	err := db.DB.Model(&models.Cart{}).
+		Where("user_id = ?", req.User).
+		First(&cart).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// Không tìm thấy Cart, vẫn trả về thành công (vì không có gì để xóa)
+			response.StatusCode = 200
+			response.Error = ""
+			return &response, nil
+		}
+		// Lỗi khác (ví dụ: database error)
+		response.StatusCode = 500
+		response.Error = "Failed to find cart: " + err.Error()
+		return &response, err
+	}
+
+	// Thực hiện truy vấn xóa CartItem
+	err = db.DB.
+		Where("cart_id = ? AND related_id IN ? AND related_type = 'products'", cart.ID, productIDs).
+		Delete(&models.CartItem{}).Error
+	if err != nil {
+		response.StatusCode = 500
+		response.Error = "Failed to clear cart: " + err.Error()
+		return &response, err
+	}
+
+	// Trả về response
 	response.StatusCode = 200
 	response.Error = ""
 	return &response, nil

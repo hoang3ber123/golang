@@ -14,7 +14,7 @@ var (
 )
 
 type Order struct {
-	BaseModel
+	BaseModel                   // ID(uuid.UUID), CreatedAt,UpdatedAt
 	UserID        string        `gorm:"type:varchar(36);not null;index"`
 	PaymentMethod string        `gorm:"type:varchar(20);not null;uniqueIndex:idx_unique_transaction_payment"`
 	TransactionID string        `gorm:"type:varchar(255);not null;uniqueIndex:idx_unique_transaction_payment"`

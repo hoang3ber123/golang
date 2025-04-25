@@ -14,17 +14,7 @@ import (
 )
 
 // lưu lượt xem detail product
-func SaveClickProduct(productID uuid.UUID, ctx *fiber.Ctx) {
-	userInterface := ctx.Locals("user")
-	if userInterface == nil {
-		return
-	}
-
-	user, ok := userInterface.(*models.User)
-	if !ok {
-		return
-	}
-
+func SaveClickProduct(productID uuid.UUID, user *models.User) {
 	var history models.HistoryView
 
 	// Kiểm tra xem bản ghi có tồn tại không
@@ -51,16 +41,7 @@ func SaveClickProduct(productID uuid.UUID, ctx *fiber.Ctx) {
 }
 
 // lưu lượt search sản phẩm bằng product
-func SaveSearchCategoryProduct(categoriesID []string, ctx *fiber.Ctx) {
-	userInterface := ctx.Locals("user")
-	if userInterface == nil {
-		return
-	}
-
-	user, ok := userInterface.(*models.User)
-	if !ok {
-		return
-	}
+func SaveSearchCategoryProduct(categoriesID []string, user *models.User) {
 	// truy vấn lấy title của danh sách category
 	var categoriesTitle []string
 	db.DB.Model(models.Category{}).

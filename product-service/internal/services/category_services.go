@@ -75,7 +75,6 @@ func GetCategoriesFromRedis() (string, *responses.ErrorResponse) {
 	defer cancel()
 	redisKey := config.Config.RedisCategoriesKey
 	categoriesJSON, err := db.RedisDB.Get(ctx, redisKey).Result()
-
 	var allCategories []models.Category
 
 	// Bước 1: Nếu Redis có lỗi khác nil, trả lỗi
@@ -88,7 +87,6 @@ func GetCategoriesFromRedis() (string, *responses.ErrorResponse) {
 		if err := db.DB.Find(&allCategories).Error; err != nil {
 			return "", responses.NewErrorResponse(fiber.StatusInternalServerError, "Database error: "+err.Error())
 		}
-
 		jsonData, err := json.Marshal(allCategories)
 		if err != nil {
 			return "", responses.NewErrorResponse(fiber.StatusInternalServerError, "JSON marshal error: "+err.Error())

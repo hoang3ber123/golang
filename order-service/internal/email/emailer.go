@@ -7,12 +7,18 @@ import (
 	"html/template"
 	"net/smtp"
 	"order-service/config"
+	"order-service/internal/db"
 	"order-service/internal/models"
 	"path/filepath"
 )
 
-func SendPaymentCheckout(user models.User, products []models.Product, order models.Order) {
+func SendPaymentCheckout(user models.User, productIDS []string, order models.Order) {
 	fmt.Println("order in mail:", order)
+	products := make([]models.Product, len(productIDS))
+	if err := db.DB.Where("id IN ?", productIDS).Find(&products).Error; err != nil {
+		fmt.Println("Error happpend when senpayment checkout with filter products:", err.Error())
+		return
+	}
 	// SMTP Server Info
 	smtpServer := config.Config.SMTPServer
 	smtpPort := config.Config.SMTPPort

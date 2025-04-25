@@ -21,7 +21,6 @@ class RecommendServiceServicer(recommend_pb2_grpc.RecommendServiceServicer):
         # Lấy dữ liệu từ request
         query = request.query  # Chuỗi truy vấn
         categories = request.categories  # Danh sách các Category từ request
-
         # Gọi hàm predict_categories từ category_service.py
         category_ids = predict_categories(query, categories, threshold=0.60, rank=10)
         

@@ -184,7 +184,13 @@ func ProductList(c *fiber.Ctx) error {
 
 	// Lưu lại lịch sử tìm kiếm theo categories
 	if len(categoryIDs) > 0 {
-		go services.SaveSearchCategoryProduct(categoryIDs, c)
+		userInterface := c.Locals("user")
+		if userInterface != nil {
+			user, ok := userInterface.(*models.User)
+			if ok {
+				go services.SaveSearchCategoryProduct(categoryIDs, user)
+			}
+		}
 	}
 
 	return responses.NewSuccessResponse(fiber.StatusOK, fiber.Map{
@@ -264,8 +270,37 @@ func ProductDetail(c *fiber.Ctx) error {
 	}
 	instance.Categories = categories
 	// Lưu lượt click
-	go services.SaveClickProduct(instance.ID, c)
+	userInterface := c.Locals("user")
+	if userInterface != nil {
+		user, ok := userInterface.(*models.User)
+		if ok {
+			go services.SaveClickProduct(instance.ID, user)
+		}
+	}
 	return responses.NewSuccessResponse(fiber.StatusOK, serializers.ProductDetailResponse(&instance)).Send(c)
+}
+
+// Lấy detail product employee
+func ProductDetailEmployee(c *fiber.Ctx) error {
+	slug := c.Params("slug")
+	var instance models.Product
+	if err := db.DB.First(&instance, "slug = ?", slug).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return responses.NewErrorResponse(fiber.StatusNotFound, "Product not found").Send(c)
+		}
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, "Database error: "+err.Error()).Send(c)
+	}
+
+	// Query to get product and role
+	var categories []models.Category
+	if err := db.DB.Model(&models.Category{}).
+		Joins("JOIN product_categories ON product_categories.category_id = categories.id").
+		Where("product_categories.product_id = ?", instance.ID).
+		Find(&categories).Error; err != nil {
+		return responses.NewErrorResponse(fiber.StatusInternalServerError, err.Error()).Send(c)
+	}
+	instance.Categories = categories
+	return responses.NewSuccessResponse(fiber.StatusOK, serializers.ProductDetailEmployeeResponse(&instance)).Send(c)
 }
 
 func ProductDelete(c *fiber.Ctx) error {
@@ -319,9 +354,13 @@ func ProductDownload(c *fiber.Ctx) error {
 	userID := user.ID.String()
 	relatedID := id
 	relatedType := "products"
-	err := grpcclient.CheckBoughtRequest(userID, relatedID, relatedType)
+	isBought, err := grpcclient.CheckBoughtRequest(userID, relatedID, relatedType)
 	if err != nil {
 		return err.Send(c)
+	}
+	// nếu chưa tải
+	if !isBought {
+		return responses.NewErrorResponse(fiber.StatusBadRequest, "You did not buy this product.").Send(c)
 	}
 	// Tạo link tải tạm
 	temp_url := utils_system.GenerateTempURL(result.File)

@@ -11,6 +11,8 @@ import (
 	"product-service/internal/db"
 	grpcclient "product-service/internal/grpc_client"
 	"product-service/internal/routes"
+	"product-service/internal/tasks"
+	openai "product-service/open-ai"
 	protohandler "product-service/proto/proto_handler"
 
 	"syscall"
@@ -35,6 +37,11 @@ func init() {
 	grpcclient.InitAuthGRPCClient()
 	grpcclient.InitOrderGRPCClient()
 	grpcclient.InitRecommendGRPCClient()
+	// init task manager
+	tasks.InitTaskManager()
+	// init model ai
+	openai.InitGeminiModel()
+
 }
 
 var grpcServer *grpc.Server // Biến toàn cục để quản lý gRPC server
@@ -63,6 +70,7 @@ func startFiberServer() *fiber.App {
 		IdleTimeout:  5 * time.Second,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 5 * time.Second,
+		BodyLimit:    200 * 1024 * 1024, // 200MB
 	})
 
 	// Middleware
@@ -117,7 +125,9 @@ func shutdownServers(app *fiber.App) {
 	// Close connected to order service
 	grpcclient.CloseRecommendGRPCClient()
 	log.Println("gRPC recommend client connection closed")
-
+	// Close task manager
+	tasks.StopAllTask()
+	log.Println("All task was closed")
 	// Close database connection
 	sqlDB, err := db.DB.DB()
 	if err != nil {
